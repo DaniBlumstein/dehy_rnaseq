@@ -297,6 +297,10 @@ for (mod in 1:ncol(geneModuleMembership_kid))
                           paste("p.MM.", modNames_kid[modOrder[mod]], sep=""))
 }
 
+geneInfo0_kid$ensembl <- rownames(geneInfo0_kid)
+geneInfo0_kid <- merge(geneInfo0_kid, annos, by.x = "ensembl", by.y = "ensembl")
+geneInfo0_kid$ensid <- NULL
+
 write.csv(geneInfo0_kid, file="results/WGCNAresults/ALLSAMPLES_kid_wgcna_gene_module_membership_pearson_signed.csv")
 ```
 
@@ -305,19 +309,85 @@ do tomorrow. brain tired today
 ```{r}
 ############### GO enrichment #################
 library(gprofiler2)
-lz_de <-read.csv(file = "DE_LZ_allGenes_wPvals_revised.csv", header = TRUE)
-lz_ref <- lz_de$mus_ID
-lz_fetus_de <- lz_de$mus_ID[which(lz_de$imprint_candidate)]
-lz_wgcna_green_de <- lz_de$mus_ID[which(lz_de$top_module=="green")]
-lz_wgcna_magenta_de <- lz_de$mus_ID[which(lz_de$top_module=="magenta")]
-lz_wgcna_tan_de <- lz_de$mus_ID[which(lz_de$top_module=="tan")]
+kid_ref <- geneInfo0_kid$gene
 
-LZ_fetusde_GO <- gost(lz_fetus_de, organism = "mmusculus", 
+kid_wgcna_salmon <- geneInfo0_kid$gene[which(geneInfo0_kid$moduleColor=="salmon")]
+kid_wgcna_lightcyan <- geneInfo0_kid$gene[which(geneInfo0_kid$moduleColor=="lightcyan")]
+kid_wgcna_turquoise <- geneInfo0_kid$gene[which(geneInfo0_kid$moduleColor=="turquoise")]
+kid_wgcna_cyan <- geneInfo0_kid$gene[which(geneInfo0_kid$moduleColor=="cyan")]
+kid_wgcna_magenta <- geneInfo0_kid$gene[which(geneInfo0_kid$moduleColor=="magenta")]
+kid_wgcna_tan <- geneInfo0_kid$gene[which(geneInfo0_kid$moduleColor=="tan")]
+kid_wgcna_greenyellow <- geneInfo0_kid$gene[which(geneInfo0_kid$moduleColor=="greenyellow")]
+kid_wgcna_midnightblue <- geneInfo0_kid$gene[which(geneInfo0_kid$moduleColor=="midnightblue")]
+
+kid_wgcna_salmon_GO <- gost(kid_wgcna_salmon, organism = "hsapiens", 
                      ordered_query = F, significant = T, exclude_iea = T,
                      correction_method = "bonferroni",
-                     custom_bg = lz_ref)
-sink(file = "LZ_fetusde_GO.csv")
-LZ_fetus_GO
+                     custom_bg = kid_ref)
+gostplot(kid_wgcna_salmon_GO, capped = TRUE, interactive = TRUE)
+sink(file = "results/WGCNAresults/kid_wgcna_salmon_GO.csv")
+sink()
+
+
+kid_wgcna_lightcyan_GO <- gost(kid_wgcna_lightcyan, organism = "hsapiens", 
+                     ordered_query = F, significant = T, exclude_iea = T,
+                     correction_method = "bonferroni",
+                     custom_bg = kid_ref)
+gostplot(kid_wgcna_lightcyan_GO, capped = TRUE, interactive = TRUE)
+sink(file = "results/WGCNAresults/kid_wgcna_lightcyan_GO.csv")
+sink()
+
+
+kid_wgcna_turquoise_GO <- gost(kid_wgcna_turquoise, organism = "hsapiens", 
+                     ordered_query = F, significant = T, exclude_iea = T,
+                     correction_method = "bonferroni",
+                     custom_bg = kid_ref)
+gostplot(kid_wgcna_turquoise_GO, capped = TRUE, interactive = TRUE)
+sink(file = "results/WGCNAresults/kid_wgcna_turquoise_GO.csv")
+sink()
+
+
+kid_wgcna_cyan_GO <- gost(kid_wgcna_cyan, organism = "hsapiens", 
+                     ordered_query = F, significant = T, exclude_iea = T,
+                     correction_method = "bonferroni",
+                     custom_bg = kid_ref)
+gostplot(kid_wgcna_cyan_GO, capped = TRUE, interactive = TRUE)
+sink(file = "results/WGCNAresults/kid_wgcna_cyan_GO.csv")
+sink()
+
+kid_wgcna_magenta_GO <- gost(kid_wgcna_magenta, organism = "hsapiens", 
+                     ordered_query = F, significant = T, exclude_iea = T,
+                     correction_method = "bonferroni",
+                     custom_bg = kid_ref)
+gostplot(kid_wgcna_magenta_GO, capped = TRUE, interactive = TRUE)
+sink(file = "results/WGCNAresults/kid_wgcna_magenta_GO.csv")
+sink()
+
+
+kid_wgcna_tan_GO <- gost(kid_wgcna_tan, organism = "hsapiens", 
+                     ordered_query = F, significant = T, exclude_iea = T,
+                     correction_method = "bonferroni",
+                     custom_bg = kid_ref)
+gostplot(kid_wgcna_tan_GO, capped = TRUE, interactive = TRUE)
+sink(file = "results/WGCNAresults/kid_wgcna_tan_GO.csv")
+sink()
+
+
+kid_wgcna_greenyellow_GO <- gost(kid_wgcna_greenyellow, organism = "hsapiens", 
+                     ordered_query = F, significant = T, exclude_iea = T,
+                     correction_method = "bonferroni",
+                     custom_bg = kid_ref)
+gostplot(kid_wgcna_greenyellow_GO, capped = TRUE, interactive = TRUE)
+sink(file = "results/WGCNAresults/kid_wgcna_greenyellow_GO.csv")
+sink()
+
+
+kid_wgcna_midnightblue_GO <- gost(kid_wgcna_midnightblue, organism = "hsapiens", 
+                     ordered_query = F, significant = T, exclude_iea = T,
+                     correction_method = "bonferroni",
+                     custom_bg = kid_ref)
+gostplot(kid_wgcna_midnightblue_GO, capped = TRUE, interactive = TRUE)
+sink(file = "results/WGCNAresults/kid_wgcna_midnightblue_GO.csv")
 sink()
 ```
 
