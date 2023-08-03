@@ -1,0 +1,323 @@
+---
+title: "WGCNA_kid"
+author: "Dani Blumstein"
+date: "2023-08-01"
+output: html_document
+---
+
+```{r}
+#BiocManager::install("impute")
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(ggbeeswarm)
+library(lme4)
+library(lmerTest)
+#library(edgeR)
+library(WGCNA)
+library(cluster)
+library(flashClust)
+library(devtools)
+library(Biobase)
+library(preprocessCore)
+library(gprofiler2)
+library(doParallel)
+```
+
+
+```{r}
+setwd("/Users/danielleblumstein/Documents/UNH/rnaseq/dehy_final")
+countdata<-read.table(file = "data/gene.level.count.data.tsv", header = TRUE)
+samples<- read_csv("results/samplespreadsheet.csv")
+annos <- read_csv("/Users/danielleblumstein/Documents/UNH/rnaseq/dehy_final/data/annos.txt")
+annos$ensid = mapIds(org.Hs.eg.db,
+                    keys=annos$gene, 
+                    column="ENSEMBL",
+                    keytype="SYMBOL",
+                    multiVals="first")
+
+
+
+kid_countdata <- dplyr::select(countdata, contains("kid"))
+kid_samples <-samples %>% filter(tissue == "kid") 
+kid_samples$trt <- as.factor(kid_samples$trt)
+kid_samples$sex <- as.factor(kid_samples$sex)
+
+kid_dds_trt <- DESeqDataSetFromMatrix(countData = kid_countdata,
+                                       colData = kid_samples,
+                                       design = ~ trt + sex)
+
+
+#filter out genes where there are less than 8 samples with normalized counts greater than or equal to 10.
+kid_dds_trt <- estimateSizeFactors(kid_dds_trt)
+idx <- rowSums(counts(kid_dds_trt, normalized=TRUE) >= 10 ) >= 8
+
+kid_dds_trt <- kid_dds_trt[idx,]
+print(paste("Number of genes after filtering by total expression:", nrow(kid_dds_trt)))
+matrix <- as.data.frame(counts(kid_dds_trt))
+
+#kid_dds_trt$trt_combo <- factor(paste0(kid_dds_trt$trt, kid_dds_trt$sex))
+#design(kid_dds_trt) <- ~ pro_weight + trt_combo
+
+kid_dds_trt <- DESeq(kid_dds_trt,test="Wald")
+annos$ensembl <- as.character(annos$ensid)
+
+#rename transcript rows to ensid names
+rownames(kid_dds_trt)=annos$ensid[match(names(kid_dds_trt),annos$gene)]
+#remove the NAs (those transcripts dont have a ensid name)
+kid_dds_trt <- kid_dds_trt[complete.cases(rownames(kid_dds_trt)), ]
+kid_dds_trt <- kid_dds_trt[!rownames(kid_dds_trt) == "NULL", ] 
+
+kid_dds_trt <- estimateSizeFactors(kid_dds_trt)
+normalized_counts <- vst(kid_dds_trt, blind = FALSE)
+kid_Expr <- assay(normalized_counts)
+```
+## now you have normalized read counts - yay!
+
+```{r}
+##################  WGCNA  ##########################
+
+#code to subset just DE genes
+#kid_master <- read.csv("results/DE_kid/trt_genes.csv", header = TRUE)
+#kidref <- kid_master$Gene
+#kid_Expr <- subset(normalized_counts, subset = rownames(normalized_counts) %in% kidref)
+
+#Remove gene information and transpose the expression data
+rownames(kid_Expr)<-NULL
+kid_Expr <- t(kid_Expr)
+
+##########check included genes#########
+gsg = goodSamplesGenes(kid_Expr, verbose = 3);
+gsg$allOK
+```
+
+```{r}
+# Trait data generation ---------------------------------------------------
+# Now we read in the phenotypic trait data
+kid_samples <- as.data.frame(kid_samples)
+dim(kid_samples)
+traitData_kid <- 'row.names<-'(kid_samples, kid_samples$sample)
+traitData_kid$trt <- as.numeric(as.factor(traitData_kid$trt))
+traitData_kid$sex <- as.numeric(as.factor(traitData_kid$sex))
+
+# Choose columns of trait dataset to be used in downstream analyses
+colnames(traitData_kid)
+traitData_kid <- traitData_kid %>% select(c('sex','total_weight_delta',"pro_weight","Na","BUN","AnGap","K","Crea","Hct","Cl","Glu","Hb*","TCO2","iCa","trt","mean_RQ","mean_EE","mean_H2Og","body_temp_3"))
+#traitData_kid <- 'row.names<-'(traitData_kid, traitData_kid$sample)
+traitData_kid <- as.data.frame(lapply(traitData_kid, as.numeric))
+```
+
+```{r}
+#### filter samples ########
+A_kid=adjacency(t(kid_Expr),type="distance")
+# this calculates the whole network connectivity
+k_kid=as.numeric(apply(A_kid,2,sum))-1
+# standardized connectivity
+Z.k_kid=scale(k_kid)
+
+# Designate samples as outlying
+# if their Z.k value is below the threshold
+thresholdZ.k=-4 # often -2.5
+
+# the color vector indicates outlyingness (red)
+outlierColor_kid <- ifelse(Z.k_kid<thresholdZ.k,"red","black")
+
+# calculate the cluster tree using flashClust or hclust
+sampleTree_kid <- flashClust(as.dist(1-A_kid), method = "average")
+# Convert traits to a color representation:
+# where red indicates high values
+
+
+traitColors = data.frame(numbers2colors(traitData_kid,signed=FALSE))
+dimnames(traitColors)[[2]] = paste(names(traitData_kid))
+datColors = data.frame(outlier = outlierColor_kid,traitColors)
+plotDendroAndColors(sampleTree_kid,groupLabels=names(datColors),
+                    colors=datColors,main="Sample Dendrogram and Trait Heatmap")
+```
+
+
+```{r}
+############ Choosing the soft threshold beta via scale free topology
+# Choose a set of soft thresholding powers
+powers=c(1:30) # in practice this should include powers up to 20.
+# choose power based on sft_JZ criterion
+sft_kid=pickSoftThreshold(kid_Expr,powerVector=powers, networkType = "signed")
+# Plot the results:
+
+par(mfrow=c(1,2))
+# sft_kid index as a function of different powers
+plot(sft_kid$fitIndices[,1],-sign(sft_kid$fitIndices[,3])*sft_kid$fitIndices[,2],
+     xlab="Soft Threshold (power)",ylab="sft_kid, unsigned R^2",type="n",main=paste("Scale independence"))
+text(sft_kid$fitIndices[,1],-sign(sft_kid$fitIndices[,3])*sft_kid$fitIndices[,2],
+     labels=powers,col="red", pch=1, cex=.50)
+# this line corresponds to using an R^2 cut-off of h
+abline(h=0.85,col="red")
+# Mean connectivity as a function of different powers
+plot(sft_kid$fitIndices[,1],sft_kid$fitIndices[,5],type="n",
+     xlab="Soft Threshold (power)",ylab="Mean Connectivity",main=paste("Mean connectivity"))
+text(sft_kid$fitIndices[,1],sft_kid$fitIndices[,5],labels=powers,col="red", cex=.50)
+```
+
+```{r}
+##########I'm choosing 15 for my power based on scale independence and k for kid ###########
+
+###########Automatic module detection via dynamic cutting
+
+mergingThresh = 0.25
+net_kid = blockwiseModules(kid_Expr,corType="pearson",
+                          maxBlockSize=14000,networkType="signed hybrid",power=15,minModuleSize=20,
+                          mergeCutHeight=mergingThresh,numericLabels=TRUE,saveTOMs=TRUE,
+                          pamRespectsDendro=FALSE,saveTOMFileBase="kid_TEST")
+
+moduleLabelsAutomatic_kid=net_kid$colors
+
+# Convert labels to colors for plotting
+moduleColorsAutomatic_kid = labels2colors(moduleLabelsAutomatic_kid)
+
+# A data frame with module eigengenes can be obtained as follows
+MEsAutomatic_kid=net_kid$MEs
+```
+
+```{r}
+#this is proportional weight loss
+weight_g_kid = as.data.frame(traitData_kid$pro_weight)
+names(weight_g_kid)="weight_g_kid"
+
+GS.kid=as.numeric(cor(kid_Expr,traitData_kid,use="p"))
+# This translates the numeric values into colors
+GS.kidWColor_kid=numbers2colors(GS.kid,signed=T)
+
+blocknumber=1
+datColors_kid=data.frame(moduleColorsAutomatic_kid,GS.kidWColor_kid)[net_kid$blockGenes[[blocknumber]],]
+
+# Plot the dendrogram and the module colors underneath
+plotDendroAndColors(net_kid$dendrograms[[blocknumber]],colors=datColors_kid,
+                    groupLabels=c("Module colors"),dendroLabels=FALSE,
+                    hang=0.03,addGuide=TRUE,guideHang=0.05)
+
+# Choose a module assignment
+moduleColors_kid=moduleColorsAutomatic_kid
+
+# Define numbers of genes and samples
+nGeneskid = ncol(kid_Expr)
+nSampleskid = nrow(kid_Expr)
+
+# Recalculate MEs with color labels
+MEs0kid = moduleEigengenes(kid_Expr,moduleColors_kid)$eigengenes
+
+MEs_kid = orderMEs(MEs0kid)
+modTraitCor_kid = cor(MEs_kid, traitData_kid, use = "p")
+modTraitP_kid = corPvalueStudent(modTraitCor_kid, nSampleskid)
+
+#Since we have a moderately large number of modules and traits,
+#a suitable graphical representation will help in reading
+#the table. We color code each association by the correlation value:
+# Will display correlations and their p-values
+textMatrix_kid = paste(signif(modTraitCor_kid, 2), "\n(",
+                      signif(modTraitP_kid, 1), ")", sep = "")
+dim(textMatrix_kid) = dim(modTraitCor_kid)
+par(mar = c(6, 8.5, 3, 3))
+
+# Display the correlation values within a heatmap plot
+labeledHeatmap(Matrix = modTraitCor_kid, xLabels = names(traitData_kid),
+               yLabels = names(MEs_kid), ySymbols = names(MEs_kid), 
+               colorLabels =FALSE,colors=blueWhiteRed(50),textMatrix=textMatrix_kid,
+               setStdMargins = FALSE, cex.text = 0.4, zlim = c(-1,1),
+               main = paste("Module-trait relationships, kid"))
+png("figures/kid_WGCNA_heatmap.png", width = 9.5, height = 12, units = "in", res = 300)
+```
+
+```{r}
+############################write tables w/ corr info###################################################################
+modNames_kid = substring(names(MEs_kid), 3)
+geneModuleMembership_kid = as.data.frame(cor(kid_Expr, MEs_kid, use = "p"));
+MMPvalue_kid = as.data.frame(corPvalueStudent(as.matrix(geneModuleMembership_kid), nSampleskid));
+names(geneModuleMembership_kid) = paste("MM", modNames_kid, sep="");
+names(MMPvalue_kid) = paste("p.MM", modNames_kid, sep="");
+geneTraitSignificance_kid = as.data.frame(cor(kid_Expr, weight_g_kid, use = "p"));
+GSPvalue_kid = as.data.frame(corPvalueStudent(as.matrix(geneTraitSignificance_kid), nSampleskid));
+names(geneTraitSignificance_kid) = paste("GS.", names(weight_g_kid), sep="");
+names(GSPvalue_kid) = paste("p.GS.", names(weight_g_kid), sep="");
+
+All_module_correlations_kid <- subset(signif(modTraitP_kid, 1))
+W_module_correlations_kid <- All_module_correlations_kid[,1]
+W_module_adjusted_correlations_kid <- p.adjust(W_module_correlations_kid, method = "fdr")
+
+# (aka. module eigengene based connectivity kME):
+datKME_kid=signedKME(kid_Expr, MEs_kid)
+
+Module_eigengenes_kid <- net_kid$MEs
+rownames(MEs_kid) <- rownames(kid_Expr)
+write.csv(MEs_kid, file="results/WGCNAresults/ALLSAMPLES_kid_MEs_signed.csv")
+write.csv(modTraitP_kid, file="results/WGCNAresults/ALLSAMPLES_kid_MEs_P_Pearson.csv")
+```
+
+```{r}
+############ kid models ##############
+library(lme4)
+library(lmerTest)
+
+traitData_kid <- kid_samples
+traitData_kid <- 'row.names<-'(kid_samples, kid_samples$sample)
+traitData_kid$trt <- as.numeric(as.factor(traitData_kid$trt))
+traitData_kid$sex <- as.numeric(as.factor(traitData_kid$sex))
+
+# Choose columns of trait dataset to be used in downstream analyses
+colnames(traitData_kid)
+traitData_kid <- traitData_kid %>% select(c('sex','total_weight_delta',"pro_weight","Na","BUN","AnGap","K","Crea","Hct","Cl","Glu","Hb*","TCO2","iCa","trt","mean_RQ","mean_EE","mean_H2Og","body_temp_3","sample"))
+
+MEs_kid<- read.csv("results/WGCNAresults/ALLSAMPLES_kid_MEs_signed.csv", header = TRUE)
+MEs_kid$X <-  sub("X*", "", MEs_kid$X)
+
+pheno_ME_kid <- merge(MEs_kid, traitData_kid, by.x = "X", by.y = "sample")
+
+plot(pheno_ME_kid$MEgreen ~ pheno_ME_kid$trt, col = pheno_ME_kid$trt)
+```
+
+
+```{r}
+##################################write MM and GS values to file for each gene
+# Create the starting data frame
+
+genes_kid <- assay(normalized_counts)
+geneInfo0_kid = data.frame(Gene = genes_kid,
+                          moduleColor = moduleColors_kid,
+                          geneTraitSignificance_kid,
+                          GSPvalue_kid)
+# Order modules by their significance for weight
+MEs_kid2 <- MEs_kid[,-1]
+modOrder = order(-abs(cor(MEs_kid2, weight_g_kid, use = "p")));
+# Add module membership information in the chosen order
+for (mod in 1:ncol(geneModuleMembership_kid))
+{
+  oldNames = names(geneInfo0_kid)
+  geneInfo0_kid = data.frame(geneInfo0_kid, geneModuleMembership_kid[, modOrder[mod]],
+                            MMPvalue_kid[, modOrder[mod]]);
+  names(geneInfo0_kid) = c(oldNames, paste("MM.", modNames_kid[modOrder[mod]], sep=""),
+                          paste("p.MM.", modNames_kid[modOrder[mod]], sep=""))
+}
+
+write.csv(geneInfo0_kid, file="results/WGCNAresults/ALLSAMPLES_kid_wgcna_gene_module_membership_pearson_signed.csv")
+```
+
+
+do tomorrow. brain tired today 
+```{r}
+############### GO enrichment #################
+library(gprofiler2)
+lz_de <-read.csv(file = "DE_LZ_allGenes_wPvals_revised.csv", header = TRUE)
+lz_ref <- lz_de$mus_ID
+lz_fetus_de <- lz_de$mus_ID[which(lz_de$imprint_candidate)]
+lz_wgcna_green_de <- lz_de$mus_ID[which(lz_de$top_module=="green")]
+lz_wgcna_magenta_de <- lz_de$mus_ID[which(lz_de$top_module=="magenta")]
+lz_wgcna_tan_de <- lz_de$mus_ID[which(lz_de$top_module=="tan")]
+
+LZ_fetusde_GO <- gost(lz_fetus_de, organism = "mmusculus", 
+                     ordered_query = F, significant = T, exclude_iea = T,
+                     correction_method = "bonferroni",
+                     custom_bg = lz_ref)
+sink(file = "LZ_fetusde_GO.csv")
+LZ_fetus_GO
+sink()
+```
+

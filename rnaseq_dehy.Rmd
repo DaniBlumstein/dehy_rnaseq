@@ -1,0 +1,519 @@
+---
+title: "rnaseq_dhy"
+author: "Dani Blumstein"
+date: "2022-10-14"
+output: html_document
+---
+
+
+knitr::opts_chunk$set(echo=FALSE, warning=FALSE, message=FALSE)
+
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+devtools::install_github('kevinblighe/EnhancedVolcano') 
+BiocManager::install("DESeq2", force = TRUE)
+BiocManager::install("apeglm")
+BiocManager::install("topGO")
+BiocManager::install("biomaRt")
+BiocManager::install("BiocParallel", force = TRUE)
+library("remotes")
+remotes::install_github("federicomarini/GeneTonic", 
+
+```{r}
+library(biomaRt)
+library("GeneTonic")
+library("org.Hs.eg.db")
+library("AnnotationDbi")
+library(DESeq2)
+library(dplyr)
+library(foreach)
+library(data.table)
+library(splines)
+library(ggthemes)
+library(scales)
+library(gridExtra)
+library(tidyr)
+library(pheatmap)
+library(RColorBrewer)
+library(ggplot2)
+library(apeglm)
+library(tidyverse)
+library(topGO)
+library(GO.db)
+library(readr)
+library(readxl)
+library(lubridate)
+library(patchwork)
+library(EnhancedVolcano)
+#library(biomaRt)
+```
+
+```{r}
+setwd("/Users/danielleblumstein/Documents/UNH/rnaseq/dehy_final")
+#call adams fancy functions
+source("adams_fancy_functions.R")
+dir.create("figures")
+dir.create("figures/TalkGeneFigures")
+dir.create("figures4publication")
+dir.create("results")
+dir.create("results/DEresults")
+dir.create("results/GOresults")
+dir.create("results/WGCNAresults")
+ensembl = useMart( "ensembl", dataset = "hsapiens_gene_ensembl" )
+```
+
+make sample name spreadsheet
+```{r}
+### List all samples from expression data 
+# get the directory/path for each sample in this study
+base_dir <- getwd()
+
+# get directories
+filename <- list.files(path = "data/", pattern = "gene.counts", full.names = FALSE, recursive = FALSE)
+
+# append full file path to each sample id
+files <- file.path(base_dir, "data/", filename) # files = directory + salmon directory + sample name + quantifictaion file name
+names(files) <- "data/"
+all(file.exists(files)) # do these all actually exist?
+
+# Make sample spreadsheet 
+sample <- as.data.frame(filename)
+
+# get sample
+sample$sample <- filename  %>% gsub(pattern = ".gene.counts", replacement = "")
+sample$sample <- gsub("_S.*", "", sample$sample)
+
+###############come back to##############
+# get tissue
+sample$tissue <- unlist(lapply(strsplit(sample$sample, split = "_"),"[[", 3))
+
+# get sex
+sample$sex <- unlist(lapply(strsplit(sample$sample, split = "_"),"[[", 2))
+
+# get trt
+sample$trt <- unlist(lapply(strsplit(sample$sample, split = "_"),"[[", 4))
+
+# get sample ID
+sample$Animal_ID <- unlist(lapply(strsplit(sample$sample, split = "_"),"[[", 1))
+
+#grabbing the phys data and electro/ weight data
+cages <- read.csv("data/cages.csv") 
+electrolyte_data <- read_excel("data/electrolyte_data.xlsx", na = "NA")
+col_order <- c("Animal_ID", "StartTime", "VO2", "VCO2", "H2Og","EE_kJH", "RQ", "time_in_S")
+phys_data <- cages[, col_order]
+electrolyte_data$Animal_ID <- as.character(electrolyte_data$mouse_ID)
+
+#splitting out only the phys data between 11:00 and 12:00
+noon <- period_to_seconds(hms("11:00:00")):period_to_seconds(hms("12:00:00"))
+phys_data$TimeOfDay <- ifelse(phys_data$time_in_S %in% noon, "noon", "other")
+phys_data <- phys_data[phys_data$TimeOfDay == "noon", ]
+
+mean_VO2<- setNames(aggregate(phys_data$VO2, list(phys_data$Animal_ID), FUN=mean),c("Animal_ID", "mean_VO2"))
+
+mean_VCO2<- setNames(aggregate(phys_data$VCO2, list(phys_data$Animal_ID), FUN=mean),c("Animal_ID", "mean_VCO2"))
+
+mean_EE<- setNames(aggregate(phys_data$EE_kJH, list(phys_data$Animal_ID), FUN=mean),c("Animal_ID", "mean_EE"))
+
+mean_RQ<- setNames(aggregate(phys_data$RQ, list(phys_data$Animal_ID), FUN=mean),c("Animal_ID", "mean_RQ"))
+
+mean_H2Og<- setNames(aggregate(phys_data$H2Og, list(phys_data$Animal_ID), FUN=mean),c("Animal_ID", "mean_H2Og"))
+
+total_H2Og<- setNames(aggregate(cages$H2Og, list(cages$Animal_ID), FUN=sum),c("Animal_ID", "total_H2Og"))
+#take the sum of water loss over course of experiment
+
+#merge all data frames together
+samples_phys<- Reduce(function(x, y) merge(x, y, all=TRUE), list(mean_VO2, mean_VCO2, mean_RQ, mean_H2Og, total_H2Og, mean_EE,sample))
+
+samples_phys$Animal_ID <- as.character(samples_phys$Animal_ID)
+samples <- electrolyte_data %>% right_join(samples_phys)
+samples$trt <- as.factor(samples$trt)
+samples<- samples[!is.na(samples$filename),]
+samples$pro_weight <- abs(samples$total_weight_delta/samples$weight0)
+
+write.csv(samples, "results/samplespreadsheet.csv", row.names = FALSE)
+write.csv(cages, "results/cages.csv", row.names = FALSE)
+```
+s2 <-samples %>% filter(trt == "no") 
+s2$pro_weight <- abs(s2$total_weight_delta/s2$weight0)
+mod<-lm(s2$pro_weight~s2$Na)
+plot(s2$pro_weight~s2$Na)
+abline(mod)
+summary(mod)
+
+mod<-lm(s2$mean_H2Omg~s2$Na)
+plot(s2$mean_H2Omg~s2$Na)
+abline(mod)
+summary(mod)
+
+
+```{r}
+## Import annotation documents 
+#annos <- read_delim("data/annos.txt", delim = "\t", 
+#+     escape_double = FALSE, col_names = FALSE, 
+#+     locale = locale(), trim_ws = TRUE)
+annos <- read_csv("/Users/danielleblumstein/Documents/UNH/rnaseq/dehy_final/data/annos.txt")
+
+library("org.Hs.eg.db")
+annos$ensid = mapIds(org.Hs.eg.db,
+                    keys=annos$gene, 
+                    column="ENSEMBL",
+                    keytype="SYMBOL",
+                    multiVals="first")
+```
+
+
+```{r}
+countdata <- data.frame(annos$transcript)
+colnames(countdata) <- "transcript"
+for (counts in (1:length(samples$filename)))
+  {
+  # import data for that sample
+  toimport <- samples$filename[counts]
+  tmpdata <- read.table(paste0("data/", toimport), header = FALSE, sep = "\t")
+  # sample id
+  samplename <- toimport  %>% gsub(pattern = ".gene.counts", replacement = "")
+  samplename <- gsub("_S.*", "", samplename)
+  colnames(tmpdata) <- c("transcript", samplename)
+  countdata <- dplyr::left_join(countdata, tmpdata, by = "transcript")
+}
+dim(countdata)
+countdata <- data.frame(countdata, row.names = 1)
+names(countdata)=str_sub(names(countdata),2)
+countdata
+
+write.csv(countdata, "countdata.csv", row.names = FALSE)
+```
+
+
+Quick data control. Change any "NA" values to "0"
+```{r data QC}
+# change all NA to 0
+print(paste0("Number of NA after import:", sum(is.na(countdata))))
+countdata[is.na(countdata)] <-  0
+print(paste0("Number of NA after NA removal:", sum(is.na(countdata))))
+print(paste0("Number of genes after import:", nrow(countdata)))
+
+## remove all unknown proteins
+countdata <- countdata[!rownames(countdata) == "proteins of unknown function", ]
+print(paste("Number of genes after removing all 'proteins of unknown function':", nrow(countdata)))
+
+dim(countdata)
+countdata
+```
+
+
+The count data table is currently a dataframe of counts, with each row representing a transcript in the genome. Some genes are represented by multiple transcripts in the genome, and hence our count data table. Here I will manipulate the data so that we can do a gene level analysis.
+
+```{R Create a data frame of gene level count data}
+# make rownames column 1
+countdata <- setDT(countdata, keep.rownames = "transcript")[]
+
+# add gene symbol
+countdata2 <- dplyr::left_join(annos, countdata, by = "transcript")
+dim(countdata2)
+
+# change all NA to 0
+print(paste("Number of NA after import:", sum(is.na(countdata2))))
+
+countdata2 <- countdata2 %>% 
+    mutate_at(5:163, ~replace_na(.,0))
+
+# combine all counts that map to the same gene
+countdata3 <- aggregate(countdata2[, 5:163], list(countdata2$gene), sum)
+dim(countdata3)
+
+countdata3[is.na(countdata3)] <-  0
+colnames(countdata3)[1] <- "Gene"
+countdata <- countdata3
+
+# make gene name column
+countdata <- data.frame(countdata, row.names = 1)
+print(paste("Number of genes after combining all counts that map to the same gene:", nrow(countdata)))
+
+for ( col in 1:ncol(countdata)){
+    colnames(countdata)[col] <-  sub("X*", "", colnames(countdata)[col])
+}
+
+# save gene-level count data
+write.table(countdata, "data/gene.level.count.data.tsv", row.names = TRUE, sep = "\t")
+```
+
+### DESeq data creation 
+
+```{r DESEQ creation}
+
+all(rownames(samples) %in% colnames(countdata))
+all(rownames(samples) == colnames(countdata))
+
+# crea DESeq dataset
+dds <- DESeqDataSetFromMatrix(countData = countdata,
+                                       colData = samples,
+                                       design = ~ sex + tissue +trt)
+
+```
+
+
+### Crea a PCA
+
+```{R PCA}
+vsd <- varianceStabilizingTransformation(dds, blind = FALSE)
+# get PC1 and PC2 data
+pcaData <- plotPCA(vsd, intgroup = c("sex", "tissue", "trt"), returnData = TRUE)
+# get percent variation
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+# pca code
+pca <- ggplot(pcaData, aes(x = PC1, y = PC2, color = tissue, shape = trt, name=name)) +
+  stat_ellipse(aes(group = tissue, linetype = tissue), type = "t", level = 0.95, size = 1.25, show.legend = FALSE) +
+  #scale_linetype_manual(values=c("twodash", "longdash", "solid"), guide = FALSE) +
+  geom_point(size = 3, show.legend = TRUE) + 
+  #scale_color_manual(values = c("orange1", "red1", "yellow2", "chartreuse4")) +
+  #scale_shape_manual(values = c(8,9,15,16,10,17,18,11,13)) + 
+  xlab(paste0("PC1: ", percentVar[1], "% variance")) +
+  ylab(paste0("PC2: ", percentVar[2], "% variance")) +
+  coord_fixed() + theme_bw() +
+  guides(shape = guide_legend(order = 1),color = guide_legend(order = 2)) 
+# save
+ggsave("figures/PCA.png", width = 8, height = 4.6, dpi = 600)
+
+
+library(plotly)
+ggplotly(pca)
+```
+
+
+### Make the final PCA for the publication
+
+```{R PCA for publication}
+# pca code
+ggplot(pcaData, aes(x = PC1, y = PC2, color = tissue, shape = trt)) +
+  stat_ellipse(aes(group = tissue, linetype = tissue), type = "t", level = 0.95, size = 1.25, show.legend = FALSE) +
+  #scale_linetype_manual(values=c("twodash", "longdash", "solid"), guide = FALSE) +
+  geom_point(size = 3, show.legend = TRUE) + 
+  #scale_color_manual(values = c("orange1", "red1", "yellow2", "chartreuse4")) +
+  #scale_shape_manual(values = c(8,9,15,16,10,17,18,11,13)) + 
+  xlab(paste0("PC1: ", percentVar[1], "% variance")) +
+  ylab(paste0("PC2: ", percentVar[2], "% variance")) +
+  coord_fixed() + theme_bw() +
+  guides(shape = guide_legend(order = 1),color = guide_legend(order = 2)) 
+  
+ggsave("figures4publication/PCA.png", width = 8, height = 4.6, dpi = 600)
+```
+
+
+### Crea a heatmap
+
+```{r HEATWAVE, eval = FALSE}
+# crea sample distances and sample distance matrix
+sampleDists <- dist(t(assay(vsd)))
+sampleDistMatrix <- as.matrix( sampleDists )
+
+# plot heatmap
+heatmapcolors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
+pheatmap(sampleDistMatrix, clusr_rows = FALSE, clusr_cols = FALSE, col = heatmapcolors)
+# plot and save heatmap
+png("figures/heatmap.png", width = 14.63, height = 10, units = "in", res = 600)
+pheatmap(sampleDistMatrix, clusr_rows = FALSE, clusr_cols = FALSE, col = heatmapcolors)
+dev.off()
+```
+
+### Differential expression analyses
+
+I will run some differential expression analyses now. I want to account for sex, trt, and tissue in my analyses.
+
+
+Run differential expression analysis. What is the effect of sex?
+```{r LRT sex, eval = FALSE}
+ddssex <- DESeqDataSetFromMatrix(countData = countdata,
+                                       colData = samples,
+                                       design = ~ trt + tissue + sex)
+
+ddssex <- estimateSizeFactors(ddssex)
+idx <- rowSums(counts(ddssex, normalized=TRUE) >= 10 ) >= 8
+
+ddssex <- ddssex[idx,]
+print(paste("Number of genes after filtering by total expression:", nrow(ddssex)))
+
+# run LRT test
+ddssex <- DESeq(ddssex, test="LRT", reduced = ~ trt + tissue)
+ressex <- results(ddssex)
+ressex$transcript <- mcols(ressex)$transcript
+# how many are "significant"?
+table(ressex[,"padj"] < 0.05)
+res05 <- results(ddssex, alpha=0.05)
+summary(res05)
+```
+
+```{r LRT trt, eval = FALSE}
+ddstrt <- DESeqDataSetFromMatrix(countData = countdata,
+                                       colData = samples,
+                                       design = ~ sex + tissue + trt)
+
+ddstrt <- estimateSizeFactors(ddstrt)
+idx <- rowSums(counts(ddstrt, normalized=TRUE) >= 10 ) >= 8
+
+ddstrt <- ddstrt[idx,]
+print(paste("Number of genes after filtering by total expression:", nrow(ddstrt)))
+
+# run LRT test
+ddstrt <- DESeq(ddstrt, test="LRT", reduced = ~ sex + tissue)
+restrt <- results(ddstrt)
+restrt$symbol <- mcols(restrt)$symbol
+# how many are "significant"?
+table(restrt[,"padj"] < 0.05)
+summary(restrt)
+```
+
+```{r LRT tissue, eval = FALSE}
+ddstissue <- DESeqDataSetFromMatrix(countData = countdata,
+                                       colData = samples,
+                                       design = ~ trt + sex + tissue)
+
+ddstissue <- estimateSizeFactors(ddstissue)
+idx <- rowSums(counts(ddstissue, normalized=TRUE) >= 10 ) >= 8
+
+ddstissue <- ddstissue[idx,]
+print(paste("Number of genes after filtering by total expression:", nrow(ddstissue)))
+
+# run LRT test
+ddstissue <- DESeq(ddstissue, test="LRT", reduced = ~ trt + sex)
+restissue <- results(ddstissue)
+restissue$symbol <- mcols(restissue)$symbol
+# how many are "significant"?
+table(restissue[,"padj"] < 0.05)
+summary(restissue)
+```
+
+Now I will run these test for each tissue independently. 
+in a new script, one per tissue cause life
+
+after running the individual tissue scripts take advantage of the fact that it is in Rs global enviroment and come back to this stuff
+```{r}
+compa_list <- list(
+  gi = res_enrich_gi,
+  lu = res_enrich_lu,
+  liv = res_enrich_liv
+)
+
+gs_horizon(res_enrich_kid,
+           compared_res_enrich_list = compa_list,
+           n_gs = 30,
+           sort_by = "clustered")
+
+
+lu <- PCA_graph(lu_dds_trt, "lu")
+liv <- PCA_graph(liv_dds_trt, "liv")
+hyp <- PCA_graph(hyp_dds_trt, "hyp")
+gi <- PCA_graph(gi_dds_trt, "gi")
+kid <- PCA_graph(kid_dds_trt, "kid")
+
+lu+liv+hyp+gi+ kid
+```
+
+upsetR
+number of GO terms overlapping each tissue
+```{r}
+#res_enrich_hyp1 <- dplyr::select(res_enrich_hyp, gs_id, DE_count)
+#res_enrich_hyp1$hyp <- as.integer(res_enrich_hyp1$DE_count)
+#res_enrich_hyp1$DE_count <- NULL
+
+res_enrich_kid1 <- dplyr::select(res_enrich_kid, gs_id, DE_count)
+res_enrich_kid1$kid <- as.integer(res_enrich_kid1$DE_count)
+res_enrich_kid1$DE_count <- NULL
+
+res_enrich_liv1 <- dplyr::select(res_enrich_liv, gs_id, DE_count)
+res_enrich_liv1$liv <- as.integer(res_enrich_liv1$DE_count)
+res_enrich_liv1$DE_count <- NULL
+
+res_enrich_lu1 <- dplyr::select(res_enrich_lu, gs_id, DE_count)
+res_enrich_lu1$lu <- as.integer(res_enrich_lu1$DE_count)
+res_enrich_lu1$DE_count <- NULL
+
+res_enrich_gi1 <- dplyr::select(res_enrich_gi, gs_id, DE_count)
+res_enrich_gi1$gi <- as.integer(res_enrich_gi1$DE_count)
+res_enrich_gi1$DE_count <- NULL
+
+df_list <- list(res_enrich_kid1, res_enrich_liv1, res_enrich_lu1, res_enrich_gi1)
+
+# merge all data frames and move the common column to first position and keep all other columns
+newdf <- df_list %>% purrr::reduce(full_join, by='gs_id') %>% 
+dplyr::select(gs_id, everything())
+
+newdf[is.na(newdf)] = 0
+newdf[newdf > 0] <- 1
+
+library(UpSetR)
+upset(newdf, sets = c("kid", "liv", "lu", "gi"), mb.ratio = c(0.55, 0.45), order.by = "freq")
+
+countdata1<-countdata
+
+multi_fun <- function(x){
+  cat <- paste(x[3:4], collapse = "_")
+  
+}
+test <- strsplit(colnames(countdata1), split = "_")
+colnames(countdata1)<-sapply(test,multi_fun)
+
+countdata1[is.na(countdata1)] = 0
+countdata1[countdata1 > 0] <- 1
+
+unique(colnames(countdata1))
+upset(countdata1, sets = c("gi_yes","hyp_yes","kid_yes",
+                           "liv_yes","lu_yes","gi_no",
+                           "hyp_no","liv_no","lu_no","kid_no" ), 
+                          mb.ratio = c(0.55, 0.45), order.by = "freq")
+
+
+
+#"F_gi_yes","F_hyp_yes","F_kid_yes",
+#"F_liv_yes","F_lu_yes" ,"F_gi_no",
+#"F_hyp_no","F_liv_no","F_lu_no",
+#"F_kid_no","M_liv_yes","M_kid_yes",
+#"M_lu_yes","M_gi_yes","M_hyp_yes",
+#"M_hyp_no","M_kid_no","M_liv_no","M_gi_no","M_lu_no"
+```
+
+
+upsetR
+number of genes overlapping each tissue
+```{r}
+restrt_kid<- as.data.frame(restrt_kid)
+restrt_kid$gene <- rownames(restrt_kid)
+
+restrt_liv<- as.data.frame(restrt_liv)
+restrt_liv$gene <- rownames(restrt_liv)
+
+restrt_lu<- as.data.frame(restrt_lu)
+restrt_lu$gene <- rownames(restrt_lu)
+
+restrt_gi<- as.data.frame(restrt_gi)
+restrt_gi$gene <- rownames(restrt_gi)
+
+res_enrich_kid1 <- dplyr::select(restrt_kid, gene, pvalue)
+res_enrich_kid1$kid <- as.integer(res_enrich_kid1$pvalue) + 1
+res_enrich_kid1$pvalue <- NULL
+
+res_enrich_liv1 <- dplyr::select(restrt_liv, gene, pvalue)
+res_enrich_liv1$liv <- as.integer(res_enrich_liv1$pvalue)+ 1
+res_enrich_liv1$pvalue <- NULL
+
+res_enrich_lu1 <- dplyr::select(restrt_lu, gene, pvalue)
+res_enrich_lu1$lu <- as.integer(res_enrich_lu1$pvalue)+ 1
+res_enrich_lu1$pvalue <- NULL
+
+res_enrich_gi1 <- dplyr::select(restrt_gi, gene, pvalue)
+res_enrich_gi1$gi <- as.integer(res_enrich_gi1$pvalue)+ 1
+res_enrich_gi1$pvalue <- NULL
+
+df_list <- list(res_enrich_kid1, res_enrich_liv1, res_enrich_lu1, res_enrich_gi1)
+
+# merge all data frames and move the common column to first position and keep all other columns
+newdf <- df_list %>% purrr::reduce(full_join, by='gene') %>% 
+dplyr::select(gene, everything())
+
+newdf[is.na(newdf)] = 0
+newdf[newdf > 0] <- 1
+
+library(UpSetR)
+upset(newdf, sets = c("kid", "liv", "lu", "gi"), mb.ratio = c(0.55, 0.45), order.by = "freq")
+```

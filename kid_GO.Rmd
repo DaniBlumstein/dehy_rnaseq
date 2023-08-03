@@ -1,0 +1,398 @@
+---
+title: "kid_dehy"
+author: "Dani Blumstein"
+date: "2023-04-12"
+output: html_document
+---
+```{r}
+gene_ton_fun <- function(res_object,verson_num,ensembl)
+  {
+res_object$ensembl <- sapply( strsplit( rownames(res_object), split="\\+" ), "[", 1 )
+
+#querying with the ENSEMBL gene id and requesting the Entrez gene id and HGNC gene symbol.
+library("biomaRt")
+genemap <- getBM( attributes = c("ensembl_gene_id", "hgnc_symbol"),
+                  filters = "ensembl_gene_id",
+                  values = rownames(res_object),
+                  mart = ensembl)
+
+idx <- match(rownames(res_object), genemap$ensembl_gene_id )
+res_object$hgnc_symbol <- genemap$hgnc_symbol[ idx ]
+hgnc_symbol <- res_object$hgnc_symbol
+
+mcols(kid_dds_trt) <- cbind(mcols(kid_dds_trt), hgnc_symbol)
+res_object$hgnc_symbol <- rowData(kid_dds_trt)$hgnc_symbol
+
+kid_dds_trt <- estimateSizeFactors(kid_dds_trt)
+
+FC <- 0.6
+p <- 50e-3
+
+keyvals <- rep('grey75', nrow(res_object))
+names(keyvals) <- rep('NS', nrow(res_object))
+
+keyvals[which(abs(res_object$log2FoldChange) > FC & res_object$pvalue > p)] <- 'grey50'
+names(keyvals)[which(abs(res_object$log2FoldChange) > FC & res_object$pvalue > p)] <- 'log2FoldChange'
+
+keyvals[which(abs(res_object$log2FoldChange) < FC & res_object$pvalue < p)] <- 'grey25'
+names(keyvals)[which(abs(res_object$log2FoldChange)  < FC & res_object$pvalue < p)] <- '-Log10Q'
+
+keyvals[which(res_object$log2FoldChange < -FC & res_object$pvalue < p)] <- 'blue2'
+names(keyvals)[which(res_object$log2FoldChange  < -FC & res_object$pvalue < p)] <- 'Signif. down-regulated'
+
+keyvals[which(res_object$log2FoldChange > FC & res_object$pvalue < p)] <- 'red2'
+names(keyvals)[which(res_object$log2FoldChange > FC & res_object$pvalue < p)] <- 'Signif. up-regulated'
+
+kid_volcano2 <- EnhancedVolcano(res_object,
+                lab = res_object$hgnc_symbol,
+                x = 'log2FoldChange',
+                y = 'pvalue',
+                #selectLab = rownames(res_object)[which(names(keyvals) %in% c('NS','log2FoldChange','-Log10Q','low','high'))],
+                xlim = c(-6.5,6.5),
+                xlab = bquote(~Log[2]~ 'fold change'),
+                ylab = bquote(~-Log[10] ~ italic(P)),
+                title = 'yes vs no',
+                pCutoff = 50e-3,
+                FCcutoff = 0.6,
+                pointSize = 2.5,
+                labSize = 4.5,
+                #shape = c(6, 4, 2, 11, 15),
+                #colCustom = keyvals,
+                colAlpha = 0.75,
+                legendPosition = 'right',
+                legendLabSize = 15,
+                legendIconSize = 5.0,
+                drawConnectors = FALSE,
+                widthConnectors = 0.5,
+                colConnectors = 'grey50',
+                gridlines.major = TRUE,
+                gridlines.minor = FALSE,
+                border = 'partial',
+                borderWidth = 1.5,
+                borderColour = 'black')
+ggsave(paste0("figures/kid/kid_volcano2_", verson_num, ".png"), width = 8, height = 8, dpi = 600)
+kid_volcano2
+
+return(res_object)
+}
+
+gene_ton_fig <- function(res_object,verson_num, ensembl)
+  {
+  
+anno_df <- data.frame(gene_id = res_object$ensembl, gene_name = res_object$hgnc_symbol)
+vst_macrophage <- varianceStabilizingTransformation(kid_dds_trt)
+
+bg_ids <- rownames(kid_dds_trt)[rowSums(counts(kid_dds_trt)) > 0]
+bg_symbols <- mapIds(org.Hs.eg.db,
+                     keys = bg_ids,
+                     column = "SYMBOL",
+                     keytype = "ENSEMBL",
+                     multiVals = "first")
+ 
+# res_enrich object
+#library("AnnotationDbi")
+de_symbols_IFNg_vs_naive <- deseqresult2df(res_object, FDR =0.05)$hgnc_symbol
+
+# res_enrich object ------------------------------------------------------------
+ topgoDE_macrophage_IFNg_vs_naive <-
+  pcaExplorer::topGOtable(de_symbols_IFNg_vs_naive,
+                          bg_symbols,
+                          ontology = "BP",
+                          mapping = "org.Hs.eg.db",
+                          geneID = "symbol",
+                          topTablerows = 500)
+
+res_enrich <- shake_topGOtableResult(topgoDE_macrophage_IFNg_vs_naive)
+res_enrich <- get_aggrscores(res_enrich = res_enrich,
+                                        res_de = res_object,
+                                        annotation_obj = anno_df,
+                                        aggrfun = mean)
+
+enhance_table <- enhance_table(res_enrich,
+                   res_object,
+                   n_gs = 30,
+                   annotation_obj = anno_df,
+                   chars_limit = 60)
+enhance_table
+ggsave(paste0("GO/kid/kid_enhance_table_", verson_num, ".png"), width = 8, height =15, dpi = 600)
+
+
+gs_alluvial(res_enrich = res_enrich,
+            res_de = res_object,
+            annotation_obj = anno_df,
+            n_gs = 30)
+
+volcano_plot<- gs_volcano(res_enrich,
+           p_threshold = 0.05,
+           color_by = "aggr_score",
+           volcano_labels = 10,
+           gs_ids = NULL,
+           plot_title = "my volcano")
+volcano_plot
+ggsave(paste0("GO/kid/kid_volcano_plot_", verson_num, ".png"), width = 8, height = 4.6, dpi = 600)
+
+
+mds <- gs_mds(res_enrich,
+       res_object,
+       anno_df,
+       n_gs = 200,
+       gs_ids = NULL,
+       similarity_measure = "kappa_matrix",
+       mds_k = 2,
+       mds_labels = 5,
+       mds_colorby = "z_score",
+       gs_labels = NULL,
+       plot_title = NULL) 
+mds
+ggsave(paste0("GO/kid/kid_mds_", verson_num, ".png"), width = 8, height = 4.6, dpi = 600)
+
+
+gs_dendro(res_enrich,
+          n_gs = 30,
+          gs_dist_type = "kappa", 
+          clust_method = "ward.D2",
+          color_leaves_by = "z_score",
+          size_leaves_by = "gs_pvalue",
+          color_branches_by = "clusters",
+          create_plot = TRUE)
+
+ggs <- ggs_graph(res_enrich,
+                 res_de = res_object,
+                 anno_df,
+                 n_gs = 30)
+ggs
+
+scores_mat <- gs_scores(
+  se = vst_macrophage,
+  res_de = res_object,
+  res_enrich = res_enrich,
+  annotation_obj = anno_df
+)
+gs_scoresheat(scores_mat,n_gs = 30)
+
+
+#geneset_heatmap1 <- gs_heatmap(se = vst_macrophage,
+#           res_de = res_object,
+#           res_enrich = res_enrich,
+#           annotation_obj = anno_df,
+#           geneset_id = "GO:0097746",
+#           cluster_columns = TRUE,
+#           anno_col_info = c("sex", "trt")
+#)
+#geneset_heatmap1
+
+#geneset_volcano <- signature_volcano(res_de = gi_res_trt,
+#                  res_enrich = res_enrich,
+#                  annotation_obj = anno_df,
+#                  geneset_id = "GO:0048514",
+#                  FDR = 0.05,
+#                  color = "#1a81c2"
+#)
+#ggsave("GO/gi_geneset_volcano.png", width = 8, height = 4.6, dpi = 600)
+#geneset_volcano
+}
+```
+
+```{r kid data}
+kid_countdata <- dplyr::select(countdata, contains("kid"))
+kid_samples <-samples %>% filter(tissue == "kid") 
+kid_samples$trt <- as.factor(kid_samples$trt)
+kid_samples$sex <- as.factor(kid_samples$sex)
+
+kid_dds_trt <- DESeqDataSetFromMatrix(countData = kid_countdata,
+                                       colData = kid_samples,
+                                       design = ~ trt + sex)
+
+
+#filter out genes where there are less than 8 samples with normalized counts greater than or equal to 10.
+kid_dds_trt <- estimateSizeFactors(kid_dds_trt)
+idx <- rowSums(counts(kid_dds_trt, normalized=TRUE) >= 10 ) >= 8
+
+kid_dds_trt <- kid_dds_trt[idx,]
+print(paste("Number of genes after filtering by total expression:", nrow(kid_dds_trt)))
+matrix <- as.data.frame(counts(kid_dds_trt))
+
+#kid_dds_trt$trt_combo <- factor(paste0(kid_dds_trt$trt, kid_dds_trt$sex))
+#design(kid_dds_trt) <- ~ pro_weight + trt_combo
+
+kid_dds_trt <- DESeq(kid_dds_trt,test="Wald")
+#res but with ensid name
+kid_res_trt <- results(kid_dds_trt, alpha = 0.05)
+kid_res_trt$symbol <- mcols(kid_res_trt)$symbol
+
+# how many are "significant"?
+table(kid_res_trt[,"padj"] < 0.05)
+SigGeneWrapper(kid_res_trt, 0.05, "all")
+summary(kid_res_trt)
+
+
+#BiocManager::install("vsn")
+library("vsn")
+vsd <- varianceStabilizingTransformation(kid_dds_trt, blind = FALSE)
+meanSdPlot(assay(vsd))
+
+
+pcaData <- plotPCA(vsd, intgroup = c("trt", "sex"), returnData = TRUE)
+# get percent variation
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+# pca code
+pca <- ggplot(pcaData, aes(x = PC1, y = PC2, color = trt, shape = sex, name=name)) +
+  stat_ellipse(aes(group = trt, linetype = trt), type = "t", level = 0.95, size = 1.25, show.legend = FALSE) +
+  #scale_linetype_manual(values=c("twodash", "longdash", "solid"), guide = FALSE) +
+  geom_point(size = 3, show.legend = TRUE) + 
+  #scale_color_manual(values = c("orange1", "red1", "yellow2", "chartreuse4")) +
+  #scale_shape_manual(values = c(8,9,15,16,10,17,18,11,13)) + 
+  xlab(paste0("PC1: ", percentVar[1], "% variance")) +
+  ylab(paste0("PC2: ", percentVar[2], "% variance")) +
+  coord_fixed() + theme_bw() +
+  guides(shape = guide_legend(order = 1),color = guide_legend(order = 2)) 
+ggplotly(pca)
+ggsave("figures/kid_PCA.png", width = 8, height = 4.6, dpi = 600)
+
+# crea sample distances and sample distance matrix
+sampleDists <- dist(t(assay(vsd)))
+sampleDistMatrix <- as.matrix( sampleDists )
+heatmapcolors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
+pheatmap(sampleDistMatrix, clusr_rows = FALSE, clusr_cols = FALSE, col = heatmapcolors)
+```
+
+```{r}
+#BiocManager::install("fastmatrix")
+#BiocManager::install("pcaExplorer")
+library(pcaExplorer)
+annos$ensembl <-as.character(annos$ensid)
+
+#rename transcript rows to ensid names
+rownames(kid_dds_trt)=annos$ensid[match(names(kid_dds_trt),annos$gene)]
+#remove the NAs (those transcripts dont have a ensid name)
+kid_dds_trt <- kid_dds_trt[complete.cases(rownames(kid_dds_trt)), ]
+kid_dds_trt <- kid_dds_trt[!rownames(kid_dds_trt) == "NULL", ] 
+
+kid_dds_trt <- estimateSizeFactors(kid_dds_trt)
+normalized_counts <- counts(kid_dds_trt, normalized=TRUE)
+#NOTE: DESeq2 doesn’t actually use normalized counts, rather it uses the raw counts and models the normalization inside the Generalized Linear Model (GLM). These normalized counts will be useful for downstream visualization of results, but cannot be used as input to DESeq2 or any other tools that peform differential expression analysis which use the negative binomial model.
+```
+
+### Differential expression analyses
+
+I will run some differential expression analyses now. I want to account for sex, trt, and proportional weight loss in my analyses.
+
+Run differential expression analysis. What is the effect of sex?
+
+```{r}
+ddssex <- DESeqDataSetFromMatrix(countData = kid_countdata,
+                                       colData = kid_samples,
+                                       design = ~ trt + sex)
+
+#filter out genes where there are less than 8 samples with normalized counts greater than or equal to 10.
+ddssex <- estimateSizeFactors(ddssex)
+idx <- rowSums(counts(ddssex, normalized=TRUE) >= 10 ) >= 8
+
+ddssex <- ddssex[idx,]
+print(paste("Number of genes after filtering by total expression:", nrow(ddssex)))
+matrix <- as.data.frame(counts(ddssex))
+
+
+ddssex <- DESeq(ddssex, test="Wald")
+ressex <- results(ddssex, alpha = 0.05, contrast = c("sex", "M", "F"))
+ressex$transcript <- mcols(ressex)$transcript
+kid_res_trt$symbol <- mcols(kid_res_trt)$symbol
+
+# how many are "significant"?
+table(ressex[,"padj"] < 0.05)
+summary(ressex)
+SigGeneWrapper(ressex, 0.05, "sex")
+```
+
+best model for downstream things right now
+```{r}
+ddstrt <- DESeqDataSetFromMatrix(countData = kid_countdata,
+                                       colData = kid_samples,
+                                       design = ~ trt + sex)
+
+
+#filter out genes where there are less than 8 samples with normalized counts greater than or equal to 10.
+ddstrt <- estimateSizeFactors(ddstrt)
+idx <- rowSums(counts(ddstrt, normalized=TRUE) >= 10 ) >= 8
+
+ddstrt <- ddstrt[idx,]
+print(paste("Number of genes after filtering by total expression:", nrow(ddstrt)))
+matrix <- as.data.frame(counts(ddstrt))
+
+ddstrt <- DESeq(ddstrt, test="Wald")
+
+#rename transcript rows to ensid names
+rownames(ddstrt)=annos$ensid[match(names(ddstrt),annos$gene)]
+#remove the NAs (those transcripts dont have a ensid name)
+ddstrt <- ddstrt[complete.cases(rownames(ddstrt)), ]
+ddstrt <- ddstrt[!rownames(ddstrt) == "NULL", ] 
+
+ddstrt <- estimateSizeFactors(ddstrt)
+normalized_counts <- counts(ddstrt, normalized=TRUE)
+
+restrt <- results(ddstrt, alpha = 0.01, contrast = c("trt", "yes", "no"))
+restrt$transcript <- mcols(restrt)$transcript
+restrt$symbol <- mcols(restrt)$symbol
+
+# how many are "significant"?
+table(restrt[,"padj"] < 0.01)
+summary(restrt)
+SigGeneWrapper(restrt, 0.01, "trt")
+
+restrt_kid <-restrt
+```
+
+
+```{r}
+restrt <- gene_ton_fun(restrt,0,ensembl)
+#gene_ton_fig(restrt,0,ensembl)
+
+anno_df <- data.frame(gene_id = restrt$ensembl, gene_name = restrt$hgnc_symbol)
+vst_macrophage <- varianceStabilizingTransformation(kid_dds_trt)
+
+bg_ids <- rownames(kid_dds_trt)[rowSums(counts(kid_dds_trt)) > 0]
+bg_symbols <- mapIds(org.Hs.eg.db,
+                     keys = bg_ids,
+                     column = "SYMBOL",
+                     keytype = "ENSEMBL",
+                     multiVals = "first")
+ 
+# res_enrich object
+#library("AnnotationDbi")
+de_symbols_IFNg_vs_naive <- deseqresult2df(restrt, FDR =0.05)$hgnc_symbol
+
+# res_enrich object ------------------------------------------------------------
+ topgoDE_macrophage_IFNg_vs_naive <-
+  pcaExplorer::topGOtable(de_symbols_IFNg_vs_naive,
+                          bg_symbols,
+                          ontology = "BP",
+                          mapping = "org.Hs.eg.db",
+                          geneID = "symbol",
+                          topTablerows = 500)
+
+res_enrich <- shake_topGOtableResult(topgoDE_macrophage_IFNg_vs_naive)
+res_enrich_kid <- get_aggrscores(res_enrich = res_enrich,
+                                        res_de = restrt,
+                                        annotation_obj = anno_df,
+                                        aggrfun = mean)
+
+
+#GeneTonic(dds = kid_dds_trt,
+#          res_de = restrt,
+#          res_enrich = res_enrich_kid,
+#          annotation_obj = anno_df,
+#          project_id = "myFirstGeneTonic")
+
+
+head(deseqresult2df(restrt))
+#one gene at a time
+#dds_macrophage <- estimateSizeFactors(kid_dds_trt)   
+gene_plot(kid_dds_trt,
+          gene = "ENSG00000107317",
+          intgroup = "trt",
+          assay = "counts",
+          annotation_obj = anno_df,
+          plot_type = "auto")
+```
+
+
