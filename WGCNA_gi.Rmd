@@ -63,9 +63,9 @@ gi_dds_trt <- DESeq(gi_dds_trt,test="Wald")
 annos$ensembl <- as.character(annos$ensid)
 
 #rename transcript rows to ensid names
-rownames(gi_dds_trt)=annos$ensid[match(names(gi_dds_trt),annos$gene)]
+#rownames(gi_dds_trt)=annos$ensid[match(names(gi_dds_trt),annos$gene)]
 #remove the NAs (those transcripts dont have a ensid name)
-gi_dds_trt <- gi_dds_trt[complete.cases(rownames(gi_dds_trt)), ]
+#gi_dds_trt <- gi_dds_trt[complete.cases(rownames(gi_dds_trt)), ]
 gi_dds_trt <- gi_dds_trt[!rownames(gi_dds_trt) == "NULL", ] 
 
 gi_dds_trt <- estimateSizeFactors(gi_dds_trt)
@@ -306,88 +306,76 @@ write.csv(geneInfo0_gi, file="results/WGCNAresults/ALLSAMPLES_gi_wgcna_gene_modu
 ```
 
 
-do tomorrow. brain tired today 
+GO
+```{r}
+mods <- unique(geneInfo0_gi$moduleColor)
+#removing colors getting stuck on FDR = 0.05
+mods <- mods[- 3] 
+mods <- mods[- 7]
+mods <- mods[- 7]
+mods <- mods[- 7]
+mods <- mods[- 7]
+mods <- mods[- 10]
+mods <- mods[- 10]
+mods <- mods[- 14]
 
-############### GO enrichment #################
-library(gprofiler2)
-gi_ref <- geneInfo0_gi$gene
-
-gi_wgcna_salmon <- geneInfo0_gi$gene[which(geneInfo0_gi$moduleColor=="salmon")]
-gi_wgcna_lightcyan <- geneInfo0_gi$gene[which(geneInfo0_gi$moduleColor=="lightcyan")]
-gi_wgcna_turquoise <- geneInfo0_gi$gene[which(geneInfo0_gi$moduleColor=="turquoise")]
-gi_wgcna_cyan <- geneInfo0_gi$gene[which(geneInfo0_gi$moduleColor=="cyan")]
-gi_wgcna_magenta <- geneInfo0_gi$gene[which(geneInfo0_gi$moduleColor=="magenta")]
-gi_wgcna_tan <- geneInfo0_gi$gene[which(geneInfo0_gi$moduleColor=="tan")]
-gi_wgcna_greenyellow <- geneInfo0_gi$gene[which(geneInfo0_gi$moduleColor=="greenyellow")]
-gi_wgcna_midnightblue <- geneInfo0_gi$gene[which(geneInfo0_gi$moduleColor=="midnightblue")]
-
-gi_wgcna_salmon_GO <- gost(gi_wgcna_salmon, organism = "hsapiens", 
-                     ordered_query = F, significant = T, exclude_iea = T,
-                     correction_method = "bonferroni",
-                     custom_bg = gi_ref)
-gostplot(gi_wgcna_salmon_GO, capped = TRUE, interactive = TRUE)
-sink(file = "results/WGCNAresults/gi_wgcna_salmon_GO.csv")
-sink()
+for (color in mods) 
+  {
+wgcna <- geneInfo0_gi$ensembl[which(geneInfo0_gi$moduleColor==color)]
+gi_dds_trt1 <- subset(gi_dds_trt, rownames(gi_dds_trt) %in% wgcna)
 
 
-gi_wgcna_lightcyan_GO <- gost(gi_wgcna_lightcyan, organism = "hsapiens", 
-                     ordered_query = F, significant = T, exclude_iea = T,
-                     correction_method = "bonferroni",
-                     custom_bg = gi_ref)
-gostplot(gi_wgcna_lightcyan_GO, capped = TRUE, interactive = TRUE)
-sink(file = "results/WGCNAresults/gi_wgcna_lightcyan_GO.csv")
-sink()
+restrt <- results(gi_dds_trt1, alpha = 0.01, contrast = c("trt", "yes", "no"))
+restrt$transcript <- mcols(restrt)$transcript
+restrt$symbol <- mcols(restrt)$symbol
 
+restrt$ensembl <- sapply( strsplit( rownames(restrt), split="\\+" ), "[", 1 )
+#ensembl = useMart( "ensembl", dataset = "hsapiens_gene_ensembl" )
 
-gi_wgcna_turquoise_GO <- gost(gi_wgcna_turquoise, organism = "hsapiens", 
-                     ordered_query = F, significant = T, exclude_iea = T,
-                     correction_method = "bonferroni",
-                     custom_bg = gi_ref)
-gostplot(gi_wgcna_turquoise_GO, capped = TRUE, interactive = TRUE)
-sink(file = "results/WGCNAresults/gi_wgcna_turquoise_GO.csv")
-sink()
+#querying with the ENSEMBL gene id and requesting the Entrez gene id and HGNC gene symbol.
+genemap <- getBM( attributes = c("ensembl_gene_id", "hgnc_symbol"),
+                  filters = "ensembl_gene_id",
+                  values = rownames(restrt),
+                  mart = ensembl)
 
+idx <- match(rownames(restrt), genemap$ensembl_gene_id )
+restrt$hgnc_symbol <- genemap$hgnc_symbol[ idx ]
+hgnc_symbol <- restrt$hgnc_symbol
 
-gi_wgcna_cyan_GO <- gost(gi_wgcna_cyan, organism = "hsapiens", 
-                     ordered_query = F, significant = T, exclude_iea = T,
-                     correction_method = "bonferroni",
-                     custom_bg = gi_ref)
-gostplot(gi_wgcna_cyan_GO, capped = TRUE, interactive = TRUE)
-sink(file = "results/WGCNAresults/gi_wgcna_cyan_GO.csv")
-sink()
+mcols(gi_dds_trt1) <- cbind(mcols(gi_dds_trt1), hgnc_symbol)
+restrt$hgnc_symbol <- rowData(gi_dds_trt1)$hgnc_symbol
 
-gi_wgcna_magenta_GO <- gost(gi_wgcna_magenta, organism = "hsapiens", 
-                     ordered_query = F, significant = T, exclude_iea = T,
-                     correction_method = "bonferroni",
-                     custom_bg = gi_ref)
-gostplot(gi_wgcna_magenta_GO, capped = TRUE, interactive = TRUE)
-sink(file = "results/WGCNAresults/gi_wgcna_magenta_GO.csv")
-sink()
+gi_dds_trt1 <- estimateSizeFactors(gi_dds_trt1)
 
+anno_df <- data.frame(gene_id = restrt$ensembl, gene_name = restrt$hgnc_symbol)
+vst_macrophage <- varianceStabilizingTransformation(gi_dds_trt1)
 
-gi_wgcna_tan_GO <- gost(gi_wgcna_tan, organism = "hsapiens", 
-                     ordered_query = F, significant = T, exclude_iea = T,
-                     correction_method = "bonferroni",
-                     custom_bg = gi_ref)
-gostplot(gi_wgcna_tan_GO, capped = TRUE, interactive = TRUE)
-sink(file = "results/WGCNAresults/gi_wgcna_tan_GO.csv")
-sink()
+bg_ids <- rownames(gi_dds_trt1)[rowSums(counts(gi_dds_trt1)) > 0]
+bg_symbols <- mapIds(org.Hs.eg.db,
+                     keys = bg_ids,
+                     column = "SYMBOL",
+                     keytype = "ENSEMBL",
+                     multiVals = "first")
+ 
+# res_enrich object
+#library("AnnotationDbi")
+de_symbols_IFNg_vs_naive <- deseqresult2df(restrt, FDR =0.05)$hgnc_symbol
 
+# res_enrich object ------------------------------------------------------------
+ topgoDE <-
+  pcaExplorer::topGOtable(de_symbols_IFNg_vs_naive,
+                          bg_symbols,
+                          ontology = "BP",
+                          mapping = "org.Hs.eg.db",
+                          geneID = "symbol",
+                          topTablerows = 30)
 
-gi_wgcna_greenyellow_GO <- gost(gi_wgcna_greenyellow, organism = "hsapiens", 
-                     ordered_query = F, significant = T, exclude_iea = T,
-                     correction_method = "bonferroni",
-                     custom_bg = gi_ref)
-gostplot(gi_wgcna_greenyellow_GO, capped = TRUE, interactive = TRUE)
-sink(file = "results/WGCNAresults/gi_wgcna_greenyellow_GO.csv")
-sink()
-
-
-gi_wgcna_midnightblue_GO <- gost(gi_wgcna_midnightblue, organism = "hsapiens", 
-                     ordered_query = F, significant = T, exclude_iea = T,
-                     correction_method = "bonferroni",
-                     custom_bg = gi_ref)
-gostplot(gi_wgcna_midnightblue_GO, capped = TRUE, interactive = TRUE)
-sink(file = "results/WGCNAresults/gi_wgcna_midnightblue_GO.csv")
-sink()
-
+res_enrich <- shake_topGOtableResult(topgoDE)
+res_enrich_mod <- get_aggrscores(res_enrich = res_enrich,
+                                        res_de = restrt,
+                                        annotation_obj = anno_df,
+                                        aggrfun = mean)
+res_enrich_mod$mod <- color
+write.csv(res_enrich_mod, file=paste0("results/WGCNAresults/gi/gi_wgcna_GO",color,".csv"))
+}
+```

@@ -1,15 +1,13 @@
 ---
-title: "WGCNA_kid"
+title: "test"
 author: "Dani Blumstein"
-date: "2023-08-01"
+date: "2023-08-15"
 output: html_document
 ---
-
 ```{r}
 #BiocManager::install("impute")
 library(tidyr)
 library(dplyr)
-library(ggplot2)
 library(ggbeeswarm)
 library(lme4)
 library(lmerTest)
@@ -22,6 +20,7 @@ library(Biobase)
 library(preprocessCore)
 library(gprofiler2)
 library(doParallel)
+library(readr)
 ```
 
 
@@ -30,7 +29,7 @@ setwd("/Users/danielleblumstein/Documents/UNH/rnaseq/dehy_final")
 countdata<-read.table(file = "data/gene.level.count.data.tsv", header = TRUE)
 samples<- read_csv("results/samplespreadsheet.csv")
 annos <- read_csv("/Users/danielleblumstein/Documents/UNH/rnaseq/dehy_final/data/annos.txt")
-annos$ensid = mapIds(org.Hs.eg.db,
+annos$ensid =  mapIds(org.Hs.eg.db,
                     keys=annos$gene, 
                     column="ENSEMBL",
                     keytype="SYMBOL",
@@ -63,9 +62,9 @@ kid_dds_trt <- DESeq(kid_dds_trt,test="Wald")
 annos$ensembl <- as.character(annos$ensid)
 
 #rename transcript rows to ensid names
-rownames(kid_dds_trt)=annos$ensid[match(names(kid_dds_trt),annos$gene)]
+#rownames(kid_dds_trt)=annos$ensid[match(names(kid_dds_trt),annos$gene)]
 #remove the NAs (those transcripts dont have a ensid name)
-kid_dds_trt <- kid_dds_trt[complete.cases(rownames(kid_dds_trt)), ]
+#kid_dds_trt <- kid_dds_trt[complete.cases(rownames(kid_dds_trt)), ]
 kid_dds_trt <- kid_dds_trt[!rownames(kid_dds_trt) == "NULL", ] 
 
 kid_dds_trt <- estimateSizeFactors(kid_dds_trt)
@@ -73,6 +72,7 @@ normalized_counts <- vst(kid_dds_trt, blind = FALSE)
 kid_Expr <- assay(normalized_counts)
 ```
 ## now you have normalized read counts - yay!
+
 
 ```{r}
 ##################  WGCNA  ##########################
@@ -83,7 +83,7 @@ kid_Expr <- assay(normalized_counts)
 #kid_Expr <- subset(normalized_counts, subset = rownames(normalized_counts) %in% kidref)
 
 #Remove gene information and transpose the expression data
-rownames(kid_Expr)<-NULL
+#rownames(kid_Expr)<-NULL
 kid_Expr <- t(kid_Expr)
 
 ##########check included genes#########
@@ -102,7 +102,7 @@ traitData_kid$sex <- as.numeric(as.factor(traitData_kid$sex))
 
 # Choose columns of trait dataset to be used in downstream analyses
 colnames(traitData_kid)
-traitData_kid <- traitData_kid %>% select(c('sex','total_weight_delta',"pro_weight","Na","BUN","AnGap","K","Crea","Hct","Cl","Glu","Hb*","TCO2","iCa","trt","mean_RQ","mean_EE","mean_H2Og","body_temp_3"))
+traitData_kid <- traitData_kid %>% dplyr::select(c('sex','total_weight_delta',"pro_weight","Na","BUN","AnGap","K","Crea","Hct","Cl","Glu","Hb*","TCO2","iCa","trt","mean_RQ","mean_EE","mean_H2Og","body_temp_3"))
 #traitData_kid <- 'row.names<-'(traitData_kid, traitData_kid$sample)
 traitData_kid <- as.data.frame(lapply(traitData_kid, as.numeric))
 ```
@@ -156,6 +156,7 @@ abline(h=0.85,col="red")
 plot(sft_kid$fitIndices[,1],sft_kid$fitIndices[,5],type="n",
      xlab="Soft Threshold (power)",ylab="Mean Connectivity",main=paste("Mean connectivity"))
 text(sft_kid$fitIndices[,1],sft_kid$fitIndices[,5],labels=powers,col="red", cex=.50)
+
 ```
 
 ```{r}
@@ -165,10 +166,13 @@ text(sft_kid$fitIndices[,1],sft_kid$fitIndices[,5],labels=powers,col="red", cex=
 
 mergingThresh = 0.25
 net_kid = blockwiseModules(kid_Expr,corType="pearson",
-                          maxBlockSize=14000,networkType="signed hybrid",power=15,minModuleSize=20,
-                          mergeCutHeight=mergingThresh,numericLabels=TRUE,saveTOMs=TRUE,
+                          maxBlockSize=14000,networkType="signed hybrid",power=21,minModuleSize=20,
+                          mergeCutHeight=mergingThresh,numericLabels=F,saveTOMs=TRUE,
                           pamRespectsDendro=FALSE,saveTOMFileBase="kid_TEST")
 
+```
+
+```{r}
 moduleLabelsAutomatic_kid=net_kid$colors
 
 # Convert labels to colors for plotting
@@ -176,9 +180,7 @@ moduleColorsAutomatic_kid = labels2colors(moduleLabelsAutomatic_kid)
 
 # A data frame with module eigengenes can be obtained as follows
 MEsAutomatic_kid=net_kid$MEs
-```
 
-```{r}
 #this is proportional weight loss
 weight_g_kid = as.data.frame(traitData_kid$pro_weight)
 names(weight_g_kid)="weight_g_kid"
@@ -227,6 +229,46 @@ labeledHeatmap(Matrix = modTraitCor_kid, xLabels = names(traitData_kid),
 png("figures/kid_WGCNA_heatmap.png", width = 9.5, height = 12, units = "in", res = 300)
 ```
 
+mod merging
+Now, using the new found measurements of dissimilarity, you can construct a cluster tree. You will also be adding a line at the height of .25. This height corresponds to a correlation of over 75%. Any branches below this line are more than 75% related, and you will thus be merging them!
+```{r}
+ME.dissimilarity = 1-cor(MEs0kid, use="complete") #Calculate eigengene dissimilarity
+METree = hclust(as.dist(ME.dissimilarity), method = "average") #Clustering eigengenes 
+par(mar = c(0,4,2,0)) #seting margin sizes
+par(cex = 0.6);#scaling the graphic
+plot(METree)
+abline(h=.25, col = "red") #a height of .25 corresponds to correlation of .75
+
+merge <- mergeCloseModules(kid_Expr, moduleColors_kid, cutHeight = .25)
+# The merged module colors, assigning one color to each module
+mergedColors = merge$colors
+# Eigengenes of the new merged modules
+mergedMEs = merge$newMEs
+
+plotDendroAndColors(net_kid$dendrograms[[blocknumber]], cbind(moduleColors_kid, mergedColors), 
+c("Original Module", "Merged Module"),
+dendroLabels = FALSE, hang = 0.03,
+addGuide = TRUE, guideHang = 0.05,
+main = "Gene dendrogram and module colors for original and merged modules")
+```
+
+
+```{r}
+# Isolate weight from the clinical traits
+pro_weight = as.data.frame(traitData_kid$pro_weight);
+names(pro_weight) = "pro_weight"
+mean_H2Og = as.data.frame(traitData_kid$mean_H2Og)
+names(mean_H2Og) = "mean_H2Og"
+# Add the weight to existing module eigengenes
+MET = orderMEs(cbind(MEs_kid, pro_weight,mean_H2Og))
+# Plot the relationships among the eigengenes and the trait
+par(cex = 0.9)
+plotEigengeneNetworks(MET, "", marDendro = c(0,4,1,2), marHeatmap = c(5,4,1,2), cex.lab = 0.8, xLabelsAngle
+= 90)
+```
+
+
+
 ```{r}
 ############################write tables w/ corr info###################################################################
 modNames_kid = substring(names(MEs_kid), 3)
@@ -245,12 +287,53 @@ W_module_adjusted_correlations_kid <- p.adjust(W_module_correlations_kid, method
 
 # (aka. module eigengene based connectivity kME):
 datKME_kid=signedKME(kid_Expr, MEs_kid)
+melt(datKME_kid)
+
 
 Module_eigengenes_kid <- net_kid$MEs
 rownames(MEs_kid) <- rownames(kid_Expr)
 write.csv(MEs_kid, file="results/WGCNAresults/ALLSAMPLES_kid_MEs_signed.csv")
 write.csv(modTraitP_kid, file="results/WGCNAresults/ALLSAMPLES_kid_MEs_P_Pearson.csv")
 ```
+
+```{r}
+for ( col in 1:ncol(ME.dissimilarity)){
+    colnames(ME.dissimilarity)[col] <-  sub("ME", "", colnames(ME.dissimilarity)[col])
+}
+
+for ( row in 1:nrow(ME.dissimilarity)){
+    rownames(ME.dissimilarity)[row] <-  sub("ME", "", rownames(ME.dissimilarity)[row])
+}
+
+nodes <- as.data.frame(table(moduleColorsAutomatic_kid))
+links <- melt(ME.dissimilarity)
+data_zero <- filter_if(links, is.numeric, all_vars((.) != 0))
+
+dim(ME.dissimilarity)
+net <- graph_from_adjacency_matrix(ME.dissimilarity,weighted = TRUE,)
+net <- simplify(net, remove.multiple = F, remove.loops = T)
+V(net)$color <- rownames(ME.dissimilarity)
+V(net)$size <- log(nodes$Freq)*5
+E(net)$width <- log(data_zero$value)*10
+#change arrow size and edge color:
+E(net)$edge.color <- "gray80"
+E(net)$edge.arrow.mode <- 0
+
+layouts <- grep("^layout_", ls("package:igraph"), value=TRUE)[-1]
+# Remove layouts that do not apply to our graph.
+layouts <- layouts[!grepl("bipartite|merge|norm|sugiyama|tree", layouts)]
+par(mfrow=c(3,3), mar=c(1,1,1,1))
+for (layout in layouts) {
+print(layout)
+l <- do.call(layout, list(net))
+plot(net, edge.arrow.mode=0, layout=l, main=layout) }
+# Choose final layout
+par(mfrow=c(1,1))
+plot(net, edge.arrow.mode=0, layout=layout_with_kk)
+
+#barplot(nodes$Freq, col = rownames(ME.dissimilarity), ylim = c(0,5000))
+```
+
 
 ```{r}
 ############ kid models ##############
@@ -305,89 +388,79 @@ write.csv(geneInfo0_kid, file="results/WGCNAresults/ALLSAMPLES_kid_wgcna_gene_mo
 ```
 
 
-do tomorrow. brain tired today 
+GO
 ```{r}
-############### GO enrichment #################
-library(gprofiler2)
-kid_ref <- geneInfo0_kid$gene
+mods <- unique(geneInfo0_kid$moduleColor)
+#removing colors getting stuck on FDR = 0.05
+mods <- mods[- 4] 
+mods <- mods[- 5]  
+mods <- mods[- 9] 
+mods <- mods[- 10]
+mods <- mods[- 10]
+mods <- mods[- 10]
+mods <- mods[- 11]
 
-kid_wgcna_salmon <- geneInfo0_kid$gene[which(geneInfo0_kid$moduleColor=="salmon")]
-kid_wgcna_lightcyan <- geneInfo0_kid$gene[which(geneInfo0_kid$moduleColor=="lightcyan")]
-kid_wgcna_turquoise <- geneInfo0_kid$gene[which(geneInfo0_kid$moduleColor=="turquoise")]
-kid_wgcna_cyan <- geneInfo0_kid$gene[which(geneInfo0_kid$moduleColor=="cyan")]
-kid_wgcna_magenta <- geneInfo0_kid$gene[which(geneInfo0_kid$moduleColor=="magenta")]
-kid_wgcna_tan <- geneInfo0_kid$gene[which(geneInfo0_kid$moduleColor=="tan")]
-kid_wgcna_greenyellow <- geneInfo0_kid$gene[which(geneInfo0_kid$moduleColor=="greenyellow")]
-kid_wgcna_midnightblue <- geneInfo0_kid$gene[which(geneInfo0_kid$moduleColor=="midnightblue")]
-
-kid_wgcna_salmon_GO <- gost(kid_wgcna_salmon, organism = "hsapiens", 
-                     ordered_query = F, significant = T, exclude_iea = T,
-                     correction_method = "bonferroni",
-                     custom_bg = kid_ref)
-gostplot(kid_wgcna_salmon_GO, capped = TRUE, interactive = TRUE)
-sink(file = "results/WGCNAresults/kid_wgcna_salmon_GO.csv")
-sink()
+for (color in mods) 
+  {
+wgcna <- geneInfo0_kid$ensembl[which(geneInfo0_kid$moduleColor==color)]
+kid_dds_trt1 <- subset(kid_dds_trt, rownames(kid_dds_trt) %in% wgcna)
 
 
-kid_wgcna_lightcyan_GO <- gost(kid_wgcna_lightcyan, organism = "hsapiens", 
-                     ordered_query = F, significant = T, exclude_iea = T,
-                     correction_method = "bonferroni",
-                     custom_bg = kid_ref)
-gostplot(kid_wgcna_lightcyan_GO, capped = TRUE, interactive = TRUE)
-sink(file = "results/WGCNAresults/kid_wgcna_lightcyan_GO.csv")
-sink()
+restrt <- results(kid_dds_trt1, alpha = 0.01, contrast = c("trt", "yes", "no"))
+restrt$transcript <- mcols(restrt)$transcript
+restrt$symbol <- mcols(restrt)$symbol
+
+restrt$ensembl <- sapply( strsplit( rownames(restrt), split="\\+" ), "[", 1 )
+#ensembl = useMart( "ensembl", dataset = "hsapiens_gene_ensembl" )
+
+#querying with the ENSEMBL gene id and requesting the Entrez gene id and HGNC gene symbol.
+genemap <- getBM( attributes = c("ensembl_gene_id", "hgnc_symbol"),
+                  filters = "ensembl_gene_id",
+                  values = rownames(restrt),
+                  mart = ensembl)
+
+idx <- match(rownames(restrt), genemap$ensembl_gene_id )
+restrt$hgnc_symbol <- genemap$hgnc_symbol[ idx ]
+hgnc_symbol <- restrt$hgnc_symbol
+
+mcols(kid_dds_trt1) <- cbind(mcols(kid_dds_trt1), hgnc_symbol)
+restrt$hgnc_symbol <- rowData(kid_dds_trt1)$hgnc_symbol
+
+kid_dds_trt1 <- estimateSizeFactors(kid_dds_trt1)
+
+anno_df <- data.frame(gene_id = restrt$ensembl, gene_name = restrt$hgnc_symbol)
+vst_macrophage <- varianceStabilizingTransformation(kid_dds_trt1)
+
+bg_ids <- rownames(kid_dds_trt1)[rowSums(counts(kid_dds_trt1)) > 0]
+bg_symbols <- mapIds(org.Hs.eg.db,
+                     keys = bg_ids,
+                     column = "SYMBOL",
+                     keytype = "ENSEMBL",
+                     multiVals = "first")
+ 
+# res_enrich object
+#library("AnnotationDbi")
+de_symbols_IFNg_vs_naive <- deseqresult2df(restrt, FDR =0.05)$hgnc_symbol
+
+# res_enrich object ------------------------------------------------------------
+ topgoDE <-
+  pcaExplorer::topGOtable(de_symbols_IFNg_vs_naive,
+                          bg_symbols,
+                          ontology = "BP",
+                          mapping = "org.Hs.eg.db",
+                          geneID = "symbol",
+                          topTablerows = 30)
+
+res_enrich <- shake_topGOtableResult(topgoDE)
+res_enrich_mod <- get_aggrscores(res_enrich = res_enrich,
+                                        res_de = restrt,
+                                        annotation_obj = anno_df,
+                                        aggrfun = mean)
+res_enrich_mod$mod <- color
+write.csv(res_enrich_mod, file=paste0("results/WGCNAresults/kid/kid_wgcna_GO",color,".csv"))
+}
 
 
-kid_wgcna_turquoise_GO <- gost(kid_wgcna_turquoise, organism = "hsapiens", 
-                     ordered_query = F, significant = T, exclude_iea = T,
-                     correction_method = "bonferroni",
-                     custom_bg = kid_ref)
-gostplot(kid_wgcna_turquoise_GO, capped = TRUE, interactive = TRUE)
-sink(file = "results/WGCNAresults/kid_wgcna_turquoise_GO.csv")
-sink()
-
-
-kid_wgcna_cyan_GO <- gost(kid_wgcna_cyan, organism = "hsapiens", 
-                     ordered_query = F, significant = T, exclude_iea = T,
-                     correction_method = "bonferroni",
-                     custom_bg = kid_ref)
-gostplot(kid_wgcna_cyan_GO, capped = TRUE, interactive = TRUE)
-sink(file = "results/WGCNAresults/kid_wgcna_cyan_GO.csv")
-sink()
-
-kid_wgcna_magenta_GO <- gost(kid_wgcna_magenta, organism = "hsapiens", 
-                     ordered_query = F, significant = T, exclude_iea = T,
-                     correction_method = "bonferroni",
-                     custom_bg = kid_ref)
-gostplot(kid_wgcna_magenta_GO, capped = TRUE, interactive = TRUE)
-sink(file = "results/WGCNAresults/kid_wgcna_magenta_GO.csv")
-sink()
-
-
-kid_wgcna_tan_GO <- gost(kid_wgcna_tan, organism = "hsapiens", 
-                     ordered_query = F, significant = T, exclude_iea = T,
-                     correction_method = "bonferroni",
-                     custom_bg = kid_ref)
-gostplot(kid_wgcna_tan_GO, capped = TRUE, interactive = TRUE)
-sink(file = "results/WGCNAresults/kid_wgcna_tan_GO.csv")
-sink()
-
-
-kid_wgcna_greenyellow_GO <- gost(kid_wgcna_greenyellow, organism = "hsapiens", 
-                     ordered_query = F, significant = T, exclude_iea = T,
-                     correction_method = "bonferroni",
-                     custom_bg = kid_ref)
-gostplot(kid_wgcna_greenyellow_GO, capped = TRUE, interactive = TRUE)
-sink(file = "results/WGCNAresults/kid_wgcna_greenyellow_GO.csv")
-sink()
-
-
-kid_wgcna_midnightblue_GO <- gost(kid_wgcna_midnightblue, organism = "hsapiens", 
-                     ordered_query = F, significant = T, exclude_iea = T,
-                     correction_method = "bonferroni",
-                     custom_bg = kid_ref)
-gostplot(kid_wgcna_midnightblue_GO, capped = TRUE, interactive = TRUE)
-sink(file = "results/WGCNAresults/kid_wgcna_midnightblue_GO.csv")
-sink()
 ```
+
 

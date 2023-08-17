@@ -63,9 +63,9 @@ hyp_dds_trt <- DESeq(hyp_dds_trt,test="Wald")
 annos$ensembl <- as.character(annos$ensid)
 
 #rename transcript rows to ensid names
-rownames(hyp_dds_trt)=annos$ensid[match(names(hyp_dds_trt),annos$gene)]
+#rownames(hyp_dds_trt)=annos$ensid[match(names(hyp_dds_trt),annos$gene)]
 #remove the NAs (those transcripts dont have a ensid name)
-hyp_dds_trt <- hyp_dds_trt[complete.cases(rownames(hyp_dds_trt)), ]
+#hyp_dds_trt <- hyp_dds_trt[complete.cases(rownames(hyp_dds_trt)), ]
 hyp_dds_trt <- hyp_dds_trt[!rownames(hyp_dds_trt) == "NULL", ] 
 
 hyp_dds_trt <- estimateSizeFactors(hyp_dds_trt)
