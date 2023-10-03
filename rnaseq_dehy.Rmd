@@ -126,7 +126,7 @@ total_H2Og<- setNames(aggregate(cages$H2Og, list(cages$Animal_ID), FUN=sum),c("A
 samples_phys<- Reduce(function(x, y) merge(x, y, all=TRUE), list(mean_VO2, mean_VCO2, mean_RQ, mean_H2Og, total_H2Og, mean_EE,sample))
 
 samples_phys$Animal_ID <- as.character(samples_phys$Animal_ID)
-samples <- electrolyte_data %>% right_join(samples_phys)
+samples <- electrolyte_data %>% dplyr::right_join(samples_phys)
 samples$trt <- as.factor(samples$trt)
 samples<- samples[!is.na(samples$filename),]
 samples$pro_weight <- abs(samples$total_weight_delta/samples$weight0)
@@ -217,7 +217,7 @@ dim(countdata2)
 print(paste("Number of NA after import:", sum(is.na(countdata2))))
 
 countdata2 <- countdata2 %>% 
-    mutate_at(5:163, ~replace_na(.,0))
+    dplyr::mutate_at(5:163, ~replace_na(.,0))
 
 # combine all counts that map to the same gene
 countdata3 <- aggregate(countdata2[, 5:163], list(countdata2$gene), sum)
@@ -240,7 +240,6 @@ write.table(countdata, "data/gene.level.count.data.tsv", row.names = TRUE, sep =
 ```
 
 ### DESeq data creation 
-
 ```{r DESEQ creation}
 
 all(rownames(samples) %in% colnames(countdata))
@@ -302,18 +301,17 @@ ggsave("figures4publication/PCA.png", width = 8, height = 4.6, dpi = 600)
 
 
 ### Crea a heatmap
-
 ```{r HEATWAVE, eval = FALSE}
 # crea sample distances and sample distance matrix
 sampleDists <- dist(t(assay(vsd)))
 sampleDistMatrix <- as.matrix( sampleDists )
+
 
 # plot heatmap
 heatmapcolors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
 pheatmap(sampleDistMatrix, clusr_rows = FALSE, clusr_cols = FALSE, col = heatmapcolors)
 # plot and save heatmap
 png("figures/heatmap.png", width = 14.63, height = 10, units = "in", res = 600)
-pheatmap(sampleDistMatrix, clusr_rows = FALSE, clusr_cols = FALSE, col = heatmapcolors)
 dev.off()
 ```
 
@@ -375,6 +373,14 @@ idx <- rowSums(counts(ddstrt, normalized=TRUE) >= 10 ) >= 8
 ddstrt <- ddstrt[idx,]
 print(paste("Number of genes after filtering by total expression:", nrow(ddstrt)))
 
+# run LRT test
+ddstrt <- DESeq(ddstrt, test="LRT", reduced = ~ tissue + sex)
+restrt <- results(ddstrt)
+restrt$symbol <- mcols(restrt)$symbol
+# how many are "significant"?
+table(restrt[,"padj"] < 0.001)
+
+write.table(restrt, file="restrt.csv", quote=F)
 
 ddstrt <- DESeq(ddstrt,test="Wald")
 annos$ensembl <- as.character(annos$ensid)
@@ -384,14 +390,145 @@ rownames(ddstrt)=annos$ensid[match(names(ddstrt),annos$gene)]
 #remove the NAs (those transcripts dont have a ensid name)
 ddstrt <- ddstrt[complete.cases(rownames(ddstrt)), ]
 ddstrt <- ddstrt[!rownames(ddstrt) == "NULL", ] 
+rownames(ddstrt)=annos$gene[match(names(ddstrt),annos$ensid)]
 
 ddstrt <- estimateSizeFactors(ddstrt)
 normalized_counts <- vst(ddstrt, blind = FALSE)
 all_Expr <- assay(normalized_counts)
+#all_Expr<- as.data.frame(all_Expr)
+#all_Expr <- tibble::rownames_to_column(all_Expr, "ID")
+
+library(caroline)
+write.delim(all_Expr, "data/normalized.count.data.txt", sep = '\t')
+
+
+all_Expr<- as.matrix(all_Expr)
+heatmap(all_Expr,
+        Rowv=NA, Colv=NA, col=rev(brewer.pal(9,"RdBu")))
 ```
 
-## now you have normalized read counts - yay!
+```{r}
+library(ggfortify)
+library(vegan)
 
+genes_for_cca <- read_csv("results/WGCNAresults/genes_for_cca.csv", col_names = FALSE)
+all_Expr<- as.data.frame(all_Expr)
+
+subset_all_Expr <- all_Expr %>% filter(rownames(all_Expr) %in% genes_for_cca$X1)
+
+
+t_subset_all_Expr <- t(subset_all_Expr)
+samples<-as.data.frame(samples)
+traitData_V2 <- samples %>% dplyr::select(c("trt","pro_weight","mean_RQ","mean_EE","mean_H2Og","body_temp_3","sample","tissue", "sex","mouse_ID"))
+
+traitData_V2 <- traitData_V2 |>
+    mutate(tt = fct_cross(trt, sex))
+
+#traitData_V2$trt <- as.numeric(traitData_V2$trt)
+#traitData_V2$sex <- as.numeric(traitData_V2$sex)
+rownames(traitData_V2) <- traitData_V2$sample
+traitData_V2 <- subset(traitData_V2, select = -sample)
+
+cca_model <- cca(t_subset_all_Expr~tt*(pro_weight+mean_RQ+mean_EE+mean_H2Og+body_temp_3 + tissue) +Condition(mouse_ID),data = traitData_V2)
+unique(traitData_V2$tt)
+#cca_model <- cca(t_subset_all_Expr~tissue*(pro_weight+mean_RQ+mean_EE+mean_H2Og+body_temp_3),data = traitData_V2)
+
+#anova the model to find the significance of the terms
+#anova(cca_model)
+#anova(cca_model,by="terms")
+#anova(cca_model,by="axis")
+#anova(cca_model, by = "margin")
+
+#Get CCA scores
+df_species  <- data.frame(summary(cca_model)$species[,1:2])# get the genes CC1 and CC2 scores
+
+boxplot(df_species$CCA1)
+boxplot(df_species$CCA2)
+
+out1 <- boxplot.stats(df_species$CCA1)$out
+out_ind1 <- which(df_species$CCA1 %in% c(out1))
+
+out2 <- boxplot.stats(df_species$CCA2)$out
+out_ind2 <- which(df_species$CCA2 %in% c(out2))
+
+out<-unique(sort(append(out_ind1,out_ind2)))
+outliers <- df_species[out, ]
+outliers$color <- "outlier"
+
+norm <- df_species[-out, ]
+norm$color <- "in bound"
+
+graphing_data <- as.data.frame(rbind(norm,outliers))
+
+df_sites  <- data.frame(summary(cca_model)$sites[,1:2])# get the indivisuals CC1 and CC2 scores
+df_environ  <- scores(summary(cca_model)$biplot[c(4,7,16:21),1:2]) #get the physio vars CC1 and CC2 scores
+
+df_tissue  <- scores(summary(cca_model)$centroids[,1:2]) #get the tissue centriod vars CC1 and CC2 scores
+
+
+rc <- function (u) paste0(u[c(3,4)], collapse = "_")
+#make col names just the tissue, sex, trt
+df_sites$lable <- unlist(lapply(strsplit(rownames(df_sites), split = "_"),rc))
+
+cca1_varex<-round(summary(cca_model)$cont$importance[2,1]*100,2) #Get percentage of variance explained by first axis
+cca2_varex<-round(summary(cca_model)$cont$importance[2,2]*100,2) #Get percentage of variance explained by second axis
+
+#Set a scaling variable to multiply the CCA values, in order to get a very similar plot to the the one generated by plot(cca_model). You can adjust it according to your data
+scaling_factor <- 2
+
+cca_plot <- ggplot(df_species, 
+       aes(x=CCA1, y=CCA2)) + 
+  #Draw lines on x = 0 and y = 0
+  geom_hline(yintercept=0, 
+             linetype="dashed") +
+  geom_vline(xintercept=0, 
+             linetype="dashed") +
+  #coord_fixed()+
+  #Add species text
+    geom_text(data=graphing_data, 
+            aes(x=CCA1,#Score in CCA1 to add species text
+                y=CCA2,#Score in CCA2 to add species text
+                label=rownames(graphing_data),
+                hjust=0.5*(1-sign(CCA1)),#Set the text horizontal alignment according to its position in the CCA plot
+                vjust=0.5*(1-sign(CCA2)),
+                color=factor(color)),#Set the text vertical alignment according to its position in the CCA plot
+            #color = c("darkorange","forestgreen"),
+            size = 10/.pt)+
+  #Add sites text
+  geom_point(data=df_sites, 
+            aes(col = df_sites$lable,
+                x=CCA1,#Score in CCA1 to add species text
+                y=CCA2))+#Score in CCA2 to add species text
+  #Add environmental vars arrows
+  geom_segment(data=df_environ, 
+               aes(x=0, #Starting coordinate in CCA1 = 0 
+                   xend=CCA1*scaling_factor,#Ending coordinate in CCA1  
+                   y=0, #Start in CCA2 = 0
+                   yend=CCA2*scaling_factor), #Ending coordinate in CCA2 
+               color="black", #set color
+               arrow=arrow(length=unit(0.01,"npc"))#Set the size of the lines that form the tip of the arrow
+               )+
+  #Add environmental vars text
+  geom_text(data=df_environ, 
+            aes(x=CCA1*scaling_factor, 
+                y=CCA2*scaling_factor,
+                label=rownames(df_environ),
+                hjust=0.5*(1-sign(CCA1)),#Add the text of each environmental var at the end of the arrow
+                vjust=0.5*(1-sign(CCA2))),#Add the text of each environmental var at the end of the arrow 
+            color="black")+
+  #Set bw theme
+  theme_bw()+
+  #xlim(-0.4, 0.7)+
+  #ylim(-0.3, 0.35)+
+  #Set x and y axis titles
+  labs(x=paste0("CCA1 (",cca1_varex," %)"),
+       y=paste0("CCA2 (",cca2_varex," %)"))
+
+cca_plot
+```
+
+
+## now you have normalized read counts - yay!
 ```{r}
 for ( col in 1:ncol(kid_Expr)){
     colnames(kid_Expr)[col] <-  sub("X", "", colnames(kid_Expr)[col])
@@ -412,27 +549,27 @@ for ( col in 1:ncol(gi_Expr)){
 for ( col in 1:ncol(hyp_Expr)){
     colnames(hyp_Expr)[col] <-  sub("X", "", colnames(hyp_Expr)[col])
 }
-
-lst <- list(kid_Expr,liv_Expr,lu_Expr,gi_Expr,hyp_Expr)
+#,hyp_Expr,lu_Expr,gi_Expr,
+lst <- list(kid_Expr,hyp_Expr)
 genes_to_keep <- Reduce(intersect, lapply(lst, rownames))
 
 filteredkid <- kid_Expr[rownames(kid_Expr) %in% genes_to_keep,]
-filteredliv <- liv_Expr[rownames(liv_Expr) %in% genes_to_keep,]
-filteredlu <- lu_Expr[rownames(lu_Expr) %in% genes_to_keep,]
-filteredgi <- gi_Expr[rownames(gi_Expr) %in% genes_to_keep,]
+#filteredliv <- liv_Expr[rownames(liv_Expr) %in% genes_to_keep,]
+#filteredlu <- lu_Expr[rownames(lu_Expr) %in% genes_to_keep,]
+#filteredgi <- gi_Expr[rownames(gi_Expr) %in% genes_to_keep,]
 filteredhyp <- hyp_Expr[rownames(hyp_Expr) %in% genes_to_keep,]
 
-
-nSets <- 5
-setLabels = c("kid", "liv","lu","gi","hyp")
+#"liv","lu","gi"
+nSets <- 2
+setLabels = c("kid","hyp")
 multiExpr = vector(mode = "list", length = nSets)
 
 # load the expression variables in multiExpr
 multiExpr[[1]] = list(data = as.data.frame(t(filteredkid)))
-multiExpr[[2]] = list(data = as.data.frame(t(filteredliv)))
-multiExpr[[3]] = list(data = as.data.frame(t(filteredlu)))
-multiExpr[[4]] = list(data = as.data.frame(t(filteredgi)))
-multiExpr[[5]] = list(data = as.data.frame(t(filteredhyp)))
+#multiExpr[[2]] = list(data = as.data.frame(t(filteredliv)))
+#multiExpr[[3]] = list(data = as.data.frame(t(filteredlu)))
+#multiExpr[[4]] = list(data = as.data.frame(t(filteredgi)))
+multiExpr[[2]] = list(data = as.data.frame(t(filteredhyp)))
 # For easier labeling of plots, create a vector holding descriptive names of the two sets.
 
 names(multiExpr) = setLabels
@@ -448,7 +585,6 @@ for (set in 1:nSets)
 sampleTrees[[set]] = hclust(dist(multiExpr[[set]]$data), method = "average")
 }
 
-
 par(mfrow=c(5,1))
 par(mar = c(0, 4, 2, 0))
 for (set in 1:nSets)
@@ -459,14 +595,26 @@ plot(sampleTrees[[set]], main = paste("Sample clustering on all genes in", setLa
 
 
 ```{r}
-# Form a multi-set structure that will hold the clinical traits.
+# Trait data generation ---------------------------------------------------
+# Now we read in the phenotypic trait data
+traitData <- as.data.frame(samples)
+#traitData <- 'row.names<-'(samples, samples$sample)
+traitData$trt <- as.numeric(as.factor(traitData$trt))
+traitData$sex <- as.numeric(as.factor(traitData$sex))
+
+# Choose columns of trait dataset to be used in downstream analyses
+colnames(traitData)
+traitData <- traitData %>% dplyr::select(c("sample",'sex','total_weight_delta',"pro_weight","Na","BUN","AnGap","K","Crea","Hct","Cl","Glu","Hb*","TCO2","iCa","trt","mean_RQ","mean_EE","mean_H2Og","body_temp_3"))
+#traitData <- as.data.frame(lapply(traitData, as.numeric))
+
+# Form a multi-set structure that will hold the traits.
 Traits = vector(mode="list", length = nSets)
 for (set in 1:nSets)
 {
 setSamples = rownames(multiExpr[[set]]$data)
-traitRows = match(setSamples, samples$sample)
-Traits[[set]] = list(data = samples[traitRows, -1])
-#rownames(Traits[[set]]$data) = samples[traitRows, 38]
+traitRows = match(setSamples, traitData$sample)
+Traits[[set]] = list(data = traitData[traitRows, -1])
+Traits[[set]] <- subset(Traits[[set]]$data, select=-c(sample))
 }
 collectGarbage()
 
@@ -487,6 +635,7 @@ nSets = checkSets(multiExpr)$nSets
 ```
 
 ```{r}
+
 # Choose a set of soft-thresholding powers
 powers = c(seq(4,10,by=1), seq(12,20, by=2));
 # Initialize a list to hold the results of scale-free analysis
@@ -542,12 +691,14 @@ legend("bottomright", legend = setLabels, col = colors, pch = 20) ;
 } else
 legend("topright", legend = setLabels, col = colors, pch = 20) ;
 }
-dev.off();
 ```
 
 ```{r}
-net = blockwiseConsensusModules(multiExpr, power = 10, minModuleSize = 30, deepSplit = 2,pamRespectsDendro = FALSE,mergeCutHeight = 0.25, numericLabels = TRUE,minKMEtoStay = 0,saveTOMs = TRUE, verbose = 5, maxBlockSize=14000,)
+net = blockwiseConsensusModules(multiExpr, power = 14, minModuleSize = 30, deepSplit = 2,pamRespectsDendro = FALSE,mergeCutHeight = 0.25, numericLabels = F,minKMEtoStay = 0,saveTOMs = TRUE, verbose = 5, maxBlockSize=14000,)
 ```
+
+
+
 
 ```{r}
 consMEs = net$multiMEs;
@@ -559,265 +710,175 @@ consTree = net$dendrograms[[1]];
 sizeGrWindow(8,6);
 #pdf(file = "Plots/ConsensusDendrogram-auto.pdf", wi = 8, he = 6)
 plotDendroAndColors(consTree, moduleColors,"Module colors",dendroLabels = FALSE, hang = 0.03,addGuide = TRUE, guideHang = 0.05,main = "Consensus gene dendrogram and module colors")
-dev.off()
-```
-
-
-
-
-
-```{r}
-##################  WGCNA  ##########################
-
-#code to subset just DE genes
-#all_master <- read.csv("results/DE_all/trt_genes.csv", header = TRUE)
-#allref <- all_master$Gene
-#all_Expr <- subset(normalized_counts, subset = rownames(normalized_counts) %in% allref)
-
-#Remove gene information and transpose the expression data
-rownames(all_Expr)<-NULL
-all_Expr <- t(all_Expr)
-
-##########check included genes#########
-gsg = goodSamplesGenes(all_Expr, verbose = 3);
-gsg$allOK
 ```
 
 ```{r}
-# Trait data generation ---------------------------------------------------
-# Now we read in the phenotypic trait data
-samples <- as.data.frame(samples)
-dim(samples)
-traitData_all <- 'row.names<-'(samples, samples$sample)
-traitData_all$trt <- as.numeric(as.factor(traitData_all$trt))
-traitData_all$sex <- as.numeric(as.factor(traitData_all$sex))
-traitData_all$tissue <- as.numeric(as.factor(traitData_all$tissue))
+MEColors = substring(names(consMEs[[1]]$data), 3);
+MEColorNames = paste("ME", MEColors, sep="");
 
-# Choose columns of trait dataset to be used in downstream analyses
-colnames(traitData_all)
-traitData_all <- traitData_all %>% select(c('sex','total_weight_delta',"pro_weight","Na","BUN","AnGap","K","Crea","Hct","Cl","Glu","Hb*","TCO2","iCa","trt","mean_RQ","mean_EE","mean_H2Og","body_temp_3","tissue"))
-#traitData_all <- 'row.names<-'(traitData_all, traitData_all$sample)
-traitData_all <- as.data.frame(lapply(traitData_all, as.numeric))
-```
+# Set up variables to contain the module-trait correlations
+moduleTraitCor = list();
+moduleTraitPvalue = list();
 
-```{r}
-#### filter samples ########
-A_all=adjacency(t(all_Expr),type="distance")
-# this calculates the whole network connectivity
-k_all=as.numeric(apply(A_all,2,sum))-1
-# standardized connectivity
-Z.k_all=scale(k_all)
-
-# Designate samples as outlying
-# if their Z.k value is below the threshold
-thresholdZ.k=-4 # often -2.5
-
-# the color vector indicates outlyingness (red)
-outlierColor_all <- ifelse(Z.k_all<thresholdZ.k,"red","black")
-
-# calculate the cluster tree using flashClust or hclust
-sampleTree_all <- flashClust(as.dist(1-A_all), method = "average")
-# Convert traits to a color representation:
-# where red indicates high values
-
-
-traitColors = data.frame(numbers2colors(traitData_all,signed=FALSE))
-dimnames(traitColors)[[2]] = paste(names(traitData_all))
-datColors = data.frame(outlier = outlierColor_all,traitColors)
-plotDendroAndColors(sampleTree_all,groupLabels=names(datColors),
-                    colors=datColors,main="Sample Dendrogram and Trait Heatmap")
-
-```
-
-
-```{r}
-############ Choosing the soft threshold beta via scale free topology
-# Choose a set of soft thresholding powers
-powers=c(1:30) # in practice this should include powers up to 20.
-# choose power based on sft_JZ criterion
-sft_all=pickSoftThreshold(all_Expr,powerVector=powers, networkType = "signed")
-# Plot the results:
-
-par(mfrow=c(1,2))
-# sft_all index as a function of different powers
-plot(sft_all$fitIndices[,1],-sign(sft_all$fitIndices[,3])*sft_all$fitIndices[,2],
-     xlab="Soft Threshold (power)",ylab="sft_all, unsigned R^2",type="n",main=paste("Scale independence"))
-text(sft_all$fitIndices[,1],-sign(sft_all$fitIndices[,3])*sft_all$fitIndices[,2],
-     labels=powers,col="red", pch=1, cex=.50)
-# this line corresponds to using an R^2 cut-off of h
-abline(h=0.85,col="red")
-# Mean connectivity as a function of different powers
-plot(sft_all$fitIndices[,1],sft_all$fitIndices[,5],type="n",
-     xlab="Soft Threshold (power)",ylab="Mean Connectivity",main=paste("Mean connectivity"))
-text(sft_all$fitIndices[,1],sft_all$fitIndices[,5],labels=powers,col="red", cex=.50)
-```
-
-```{r}
-softPower = 14 #Chosen in the graphs before
-##########Automatic module detection via dynamic cutting
-
-merallngThresh = 0.25
-net_all = blockwiseModules(all_Expr,corType="pearson",
-                          maxBlockSize=14000,networkType="signed hybrid",power=softPower,minModuleSize=20,
-                          mergeCutHeight=merallngThresh,numericLabels=F,saveTOMs=TRUE,
-                          pamRespectsDendro=FALSE,saveTOMFileBase="all_TEST")
-
-moduleLabelsAutomatic_all=net_all$colors
-
-# Convert labels to colors for plotting
-moduleColorsAutomatic_all = labels2colors(moduleLabelsAutomatic_all)
-
-# A data frame with module eigengenes can be obtained as follows
-MEsAutomatic_all=net_all$MEs
-```
-
-
-```{r}
-#this is proportional weight loss
-weight_g_all = as.data.frame(traitData_all$pro_weight)
-names(weight_g_all)="weight_g_all"
-
-GS.all=as.numeric(cor(all_Expr,traitData_all,use="p"))
-# This translates the numeric values into colors
-GS.allWColor_all=numbers2colors(GS.all,signed=T)
-
-blocknumber=1
-datColors_all=data.frame(moduleColorsAutomatic_all,GS.allWColor_all)[net_all$blockGenes[[blocknumber]],]
-
-# Plot the dendrogram and the module colors underneath
-plotDendroAndColors(net_all$dendrograms[[blocknumber]],colors=datColors_all,
-                    groupLabels=c("Module colors"),dendroLabels=FALSE,
-                    hang=0.03,addGuide=TRUE,guideHang=0.05)
-
-# Choose a module assignment
-moduleColors_all=moduleColorsAutomatic_all
-
-# Define numbers of genes and samples
-nGenesall = ncol(all_Expr)
-nSamplesall = nrow(all_Expr)
-
-# Recalculate MEs with color labels
-MEs0all = moduleEigengenes(all_Expr,moduleColors_all)$eigengenes
-
-MEs_all = orderMEs(MEs0all)
-modTraitCor_all = cor(MEs_all, traitData_all, use = "p")
-modTraitP_all = corPvalueStudent(modTraitCor_all, nSamplesall)
-
-#Since we have a moderately large number of modules and traits,
-#a suitable graphical representation will help in reading
-#the table. We color code each association by the correlation value:
-# Will display correlations and their p-values
-textMatrix_all = paste(signif(modTraitCor_all, 2), "\n(",
-                      signif(modTraitP_all, 1), ")", sep = "")
-dim(textMatrix_all) = dim(modTraitCor_all)
-par(mar = c(6, 8.5, 3, 3))
-
-# Display the correlation values within a heatmap plot
-labeledHeatmap(Matrix = modTraitCor_all, xLabels = names(traitData_all),
-               yLabels = names(MEs_all), ySymbols = names(MEs_all), 
-               colorLabels =FALSE,colors=blueWhiteRed(50),textMatrix=textMatrix_all,
-               setStdMarallns = FALSE, cex.text = 0.4, zlim = c(-1,1),
-               main = paste("Module-trait relationships, all"))
-png("figures/WGCNA_heatmap.png", width = 9.5, height = 12, units = "in", res = 300)
-
-ME.dissimilarity = 1-cor(MEs0all, use="complete") #Calculate eigengene dissimilarity
-METree = hclust(as.dist(ME.dissimilarity), method = "average") #Clustering eigengenes 
-par(mar = c(0,4,2,0)) #seting margin sizes
-par(cex = 0.6);#scaling the graphic
-plot(METree)
-abline(h=.25, col = "red") #a height of .25 corresponds to correlation of .75
-
-```
-
-```{r}
-############################write tables w/ corr info###################################################################
-modNames_all = substring(names(MEs_all), 3)
-geneModuleMembership_all = as.data.frame(cor(all_Expr, MEs_all, use = "p"));
-MMPvalue_all = as.data.frame(corPvalueStudent(as.matrix(geneModuleMembership_all), nSamplesall));
-names(geneModuleMembership_all) = paste("MM", modNames_all, sep="");
-names(MMPvalue_all) = paste("p.MM", modNames_all, sep="");
-geneTraitSignificance_all = as.data.frame(cor(all_Expr, weight_g_all, use = "p"));
-GSPvalue_all = as.data.frame(corPvalueStudent(as.matrix(geneTraitSignificance_all), nSamplesall));
-names(geneTraitSignificance_all) = paste("GS.", names(weight_g_all), sep="");
-names(GSPvalue_all) = paste("p.GS.", names(weight_g_all), sep="");
-
-All_module_correlations_all <- subset(signif(modTraitP_all, 1))
-W_module_correlations_all <- All_module_correlations_all[,1]
-W_module_adjusted_correlations_all <- p.adjust(W_module_correlations_all, method = "fdr")
-
-# (aka. module eigengene based connectivity kME):
-datKME_all=signedKME(all_Expr, MEs_all)
-
-Module_eigengenes_all <- net_all$MEs_all
-rownames(MEs_all) <- rownames(all_Expr)
-write.csv(MEs_all, file="results/WGCNAresults/ALLSAMPLES_MEs_signed.csv")
-write.csv(modTraitP_all, file="results/WGCNAresults/ALLSAMPLES_MEs_P_Pearson.csv")
-```
-
-
-```{r}
-##################################write MM and GS values to file for each gene
-# Create the starting data frame
-
-genes_all <- assay(normalized_counts)
-geneInfo0_all = data.frame(Gene = genes_all,
-                          moduleColor = moduleColors_all,
-                          geneTraitSignificance_all,
-                          GSPvalue_all)
-# Order modules by their significance for weight
-MEs_all2 <- MEs_all[,-1]
-modOrder = order(-abs(cor(MEs_all2, weight_g_all, use = "p")));
-# Add module membership information in the chosen order
-for (mod in 1:ncol(geneModuleMembership_all))
+# Calculate the correlations
+for (set in 1:nSets)
 {
-  oldNames = names(geneInfo0_all)
-  geneInfo0_all = data.frame(geneInfo0_all, geneModuleMembership_all[, modOrder[mod]],
-                            MMPvalue_all[, modOrder[mod]]);
-  names(geneInfo0_all) = c(oldNames, paste("MM.", modNames_all[modOrder[mod]], sep=""),
-                          paste("p.MM.", modNames_all[modOrder[mod]], sep=""))
+moduleTraitCor[[set]] = cor(consMEs[[set]]$data, Traits[[set]], use = "p");
+moduleTraitPvalue[[set]] = corPvalueFisher(moduleTraitCor[[set]], exprSize$nSamples[set]);
 }
 
-geneInfo0_all$ensembl <- rownames(geneInfo0_all)
-geneInfo0_all <- merge(geneInfo0_all, annos, by.x = "ensembl", by.y = "ensembl")
-geneInfo0_all$ensid <- NULL
+
+
+# Initialize matrices to hold the consensus correlation and p-value
+consensusCor = matrix(NA, nrow(moduleTraitCor[[1]]), ncol(moduleTraitCor[[1]]));
+consensusPvalue = matrix(NA, nrow(moduleTraitCor[[1]]), ncol(moduleTraitCor[[1]]));
+
+# Find consensus negative correlations
+negative = moduleTraitCor[[1]] < 0 & moduleTraitCor[[2]] < 0 
+
+#& moduleTraitCor[[3]] < 0 & moduleTraitCor[[4]] < 0 & moduleTraitCor[[5]] < 0;
+
+consensusCor[negative] = pmax(moduleTraitCor[[1]][negative], moduleTraitCor[[2]][negative])
+                              
+#, moduleTraitCor[[3]][negative],moduleTraitCor[[4]][negative],moduleTraitCor[[5]][negative]);
+
+consensusPvalue[negative] = pmax(moduleTraitPvalue[[1]][negative], moduleTraitPvalue[[2]][negative])
+                                 #,moduleTraitPvalue[[3]][negative],moduleTraitPvalue[[4]][negative],moduleTraitPvalue[[5]][negative]);
+
+# Find consensus positive correlations
+positive = moduleTraitCor[[1]] > 0 & moduleTraitCor[[2]] > 0 
+
+
+#& moduleTraitCor[[3]] > 0 & moduleTraitCor[[4]] > 0 & moduleTraitCor[[5]] > 0;
+
+consensusCor[positive] = pmin(moduleTraitCor[[1]][positive], moduleTraitCor[[2]][positive])
+                              
+#,moduleTraitCor[[3]][positive],moduleTraitCor[[4]][positive],moduleTraitCor[[5]][positive]);
+
+consensusPvalue[positive] = pmax(moduleTraitPvalue[[1]][positive], moduleTraitPvalue[[2]][positive])
+                                 #,moduleTraitPvalue[[3]][positive],moduleTraitPvalue[[4]][positive],moduleTraitPvalue[[5]][positive]);
+
+textMatrix = paste(signif(consensusCor, 2), "\n(",signif(consensusPvalue, 1), ")", sep = "");
+dim(textMatrix) = dim(moduleTraitCor[[set]])
+
+
+#pdf(file = "figures/ModuleTraitRelationships-consensus.pdf", wi = 10, he = 7);
+
+dev.off()
+par(mar = c(6, 8.8, 3, 2.2));
+labeledHeatmap(Matrix = consensusCor,xLabels = names(Traits[[set]]),yLabels = MEColorNames,ySymbols = MEColorNames,colorLabels = FALSE,colors = blueWhiteRed(50),textMatrix = textMatrix,setStdMargins = FALSE,cex.text = 0.5,zlim = c(-1,1),main = paste("Consensus module--trait relationships across\n",paste(setLabels, collapse = " and ")))
+
+```
+
+
+```{r}
+annot = annos
+# Match probes in the data set to the probe IDs in the annotation file
+probes = names(multiExpr[[1]]$data)
+probes2annot = match(probes, annot$gene)
+
+consMEs.unord = multiSetMEs(multiExpr, universalColors = moduleLabels, excludeGrey = TRUE)
+GS = list();
+kME = list();
+for (set in 1:nSets)
+{
+GS[[set]] = corAndPvalue(multiExpr[[set]]$data, Traits[[set]]$data);
+kME[[set]] = corAndPvalue(multiExpr[[set]]$data, consMEs.unord[[set]]$data);
+}
+
+GS.metaZ = (GS[[1]]$Z + GS[[2]]$Z)/sqrt(2);
+kME.metaZ = (kME[[1]]$Z + kME[[2]]$Z)/sqrt(2);
+GS.metaP = 2*pnorm(abs(GS.metaZ), lower.tail = FALSE);
+kME.metaP = 2*pnorm(abs(kME.metaZ), lower.tail = FALSE);
+
+#GSmat = rbind(GS[[1]]$cor, GS[[2]]$cor, GS[[1]]$p, GS[[2]]$p, GS.metaZ, GS.metaP);
+#nTraits = checkSets(Traits)$nGenes
+#traitNames = colnames(Traits[[1]]$data)
+#dim(GSmat) = c(nGenes, 6*nTraits)
+#rownames(GSmat) = probes;
+#colnames(GSmat) = spaste(c("GS.set1.", "GS.set2.", "p.GS.set1.", "p.GS.set2.", "Z.GS.meta.", #"p.GS.meta"),rep(traitNames, rep(6, nTraits)))
+
+# Same code for kME:
+kMEmat = rbind(kME[[1]]$cor, kME[[2]]$cor, kME[[1]]$p, kME[[2]]$p, kME.metaZ, kME.metaP);
+MEnames = colnames(consMEs.unord[[1]]$data);
+nMEs = checkSets(consMEs.unord)$nGenes
+dim(kMEmat) = c(nGenes, 6*nMEs)
+rownames(kMEmat) = probes;
+colnames(kMEmat) = spaste(c("kME.set1.", "kME.set2.", "p.kME.set1.", "p.kME.set2.", "Z.kME.meta.", "p.kME.meta"),rep(MEnames, rep(6, nMEs)))
+
+info = data.frame(Probe = probes, GeneSymbol = annot$gene[probes2annot],EntrezID = annot$ensembl[probes2annot],ModuleLabel = moduleLabels,ModuleColor = labels2colors(moduleLabels),kMEmat);
+
+write.csv(info, file = "consensusAnalysis-CombinedNetworkResults_kid_hyp.csv",row.names = FALSE, quote = FALSE);
 ```
 
 ```{r}
-for ( col in 1:ncol(ME.dissimilarity)){
-    colnames(ME.dissimilarity)[col] <-  sub("ME", "", colnames(ME.dissimilarity)[col])
-}
+color = "cyan"
 
-for ( row in 1:nrow(ME.dissimilarity)){
-    rownames(ME.dissimilarity)[row] <-  sub("ME", "", rownames(ME.dissimilarity)[row])
-}
+wgcna <- info$EntrezID[which(info$ModuleLabel==color)]
+ddstrt1 <- subset(ddstrt, rownames(ddstrt) %in% wgcna)
 
-nodes <- as.data.frame(table(moduleColorsAutomatic_all))
-links <- melt(ME.dissimilarity)
-data_zero <- filter_if(links, is.numeric, all_vars((.) != 0))
 
-dim(ME.dissimilarity)
-net <- graph_from_adjacency_matrix(ME.dissimilarity,weighted = TRUE,)
-net <- simplify(net, remove.multiple = F, remove.loops = T)
-V(net)$color <- rownames(ME.dissimilarity)
-V(net)$size <- log(nodes$Freq)*5
-E(net)$width <- log(data_zero$value)*10
-#change arrow size and edge color:
-E(net)$edge.color <- "gray80"
-E(net)$edge.arrow.mode <- 0
+restrt <- results(ddstrt1, alpha = 0.01, contrast = c("trt", "yes", "no"))
+restrt$transcript <- mcols(restrt)$transcript
+restrt$symbol <- mcols(restrt)$symbol
 
-layouts <- grep("^layout_", ls("package:igraph"), value=TRUE)[-1]
-# Remove layouts that do not apply to our graph.
-layouts <- layouts[!grepl("bipartite|merge|norm|sugiyama|tree", layouts)]
-par(mfrow=c(3,3), mar=c(1,1,1,1))
-for (layout in layouts) {
-print(layout)
-l <- do.call(layout, list(net))
-plot(net, edge.arrow.mode=0, layout=l, main=layout) }
-# Choose final layout
-par(mfrow=c(1,1))
-plot(net, edge.arrow.mode=0, layout=layout_with_kk)
+restrt$EntrezID <- sapply( strsplit( rownames(restrt), split="\\+" ), "[", 1 )
+#ensembl = useMart( "ensembl", dataset = "hsapiens_gene_ensembl" )
 
-#barplot(nodes$Freq, col = rownames(ME.dissimilarity), ylim = c(0,5000))
+#querying with the ENSEMBL gene id and requesting the Entrez gene id and HGNC gene symbol.
+genemap <- getBM( attributes = c("ensembl_gene_id", "hgnc_symbol"),
+                  filters = "ensembl_gene_id",
+                  values = rownames(restrt),
+                  mart = ensembl)
+
+idx <- match(rownames(restrt), genemap$ensembl_gene_id )
+restrt$hgnc_symbol <- genemap$hgnc_symbol[ idx ]
+hgnc_symbol <- restrt$hgnc_symbol
+
+mcols(ddstrt1) <- cbind(mcols(ddstrt1), hgnc_symbol)
+restrt$hgnc_symbol <- rowData(ddstrt1)$hgnc_symbol
+
+ddstrt1 <- estimateSizeFactors(ddstrt1)
+
+anno_df <- data.frame(gene_id = restrt$EntrezID, gene_name = restrt$hgnc_symbol)
+vst_macrophage <- varianceStabilizingTransformation(ddstrt1)
+
+bg_ids <- rownames(ddstrt1)[rowSums(counts(ddstrt1)) > 0]
+bg_symbols <- mapIds(org.Hs.eg.db,
+                     keys = bg_ids,
+                     column = "SYMBOL",
+                     keytype = "ENSEMBL",
+                     multiVals = "first")
+ 
+# res_enrich object
+#library("AnnotationDbi")
+de_symbols_IFNg_vs_naive <- deseqresult2df(restrt, FDR =0.05)$hgnc_symbol
+
+# res_enrich object ------------------------------------------------------------
+ topgoDE <-
+  pcaExplorer::topGOtable(de_symbols_IFNg_vs_naive,
+                          bg_symbols,
+                          ontology = "BP",
+                          mapping = "org.Hs.eg.db",
+                          geneID = "symbol",
+                          topTablerows = 30)
+
+res_enrich <- shake_topGOtableResult(topgoDE)
+res_enrich_mod <- get_aggrscores(res_enrich = res_enrich,
+                                        res_de = restrt,
+                                        annotation_obj = anno_df,
+                                        aggrfun = mean)
+
+
+GeneTonic(dds = ddstrt1,
+          res_de = restrt,
+          res_enrich = res_enrich_mod,
+          annotation_obj = anno_df,
+          project_id = "myFirstGeneTonic")
+
+
+res_enrich_mod$mod <- color
+write.csv(res_enrich_mod, file=paste0("results/WGCNAresults/kid_hyp_wgcna_GO",color,".csv"))
 ```
 
 Now I will run these test for each tissue independently. 
