@@ -47,6 +47,7 @@ library(lubridate)
 library(patchwork)
 library(EnhancedVolcano)
 #library(biomaRt)
+
 ```
 
 ```{r}
@@ -239,6 +240,76 @@ for ( col in 1:ncol(countdata)){
 write.table(countdata, "data/gene.level.count.data.tsv", row.names = TRUE, sep = "\t")
 ```
 
+t tests
+```{r}
+pro_weight_F_yes <-samples %>% filter(sex == "F") 
+pro_weight_F_yes <-pro_weight_F_yes %>% filter(trt == "yes") 
+
+pro_weight_F_no <-samples %>% filter(sex == "F") 
+pro_weight_F_no <-pro_weight_F_no %>% filter(trt == "no") 
+
+t.test(pro_weight_F_no$pro_weight, pro_weight_F_yes$pro_weight)
+
+
+pro_weight_M_yes <-samples %>% filter(sex == "M") 
+pro_weight_M_yes <-pro_weight_M_yes %>% filter(trt == "yes") 
+
+pro_weight_M_no <-samples %>% filter(sex == "M") 
+pro_weight_M_no <-pro_weight_M_no %>% filter(trt == "no") 
+
+t.test(pro_weight_M_no$pro_weight, pro_weight_M_yes$pro_weight)
+
+
+meanEE_F_yes <-samples %>% filter(sex == "F") 
+meanEE_F_yes <-meanEE_F_yes %>% filter(trt == "yes") 
+
+meanEE_F_no <-samples %>% filter(sex == "F") 
+meanEE_F_no <-meanEE_F_no %>% filter(trt == "no") 
+
+t.test(meanEE_F_no$mean_EE, meanEE_F_yes$mean_EE)
+
+meanEE_M_yes <-samples %>% filter(sex == "M") 
+meanEE_M_yes <-meanEE_M_yes %>% filter(trt == "yes") 
+
+meanEE_M_no <-samples %>% filter(sex == "M") 
+meanEE_M_no <-meanEE_M_no %>% filter(trt == "no") 
+
+t.test(meanEE_M_no$mean_EE, meanEE_M_yes$mean_EE)
+
+meanRQ_F_yes <-samples %>% filter(sex == "F") 
+meanRQ_F_yes <-meanRQ_F_yes %>% filter(trt == "yes") 
+
+meanRQ_F_no <-samples %>% filter(sex == "F") 
+meanRQ_F_no <-meanRQ_F_no %>% filter(trt == "no") 
+
+t.test(meanRQ_F_no$mean_RQ, meanRQ_F_yes$mean_RQ)
+
+meanRQ_M_yes <-samples %>% filter(sex == "M") 
+meanRQ_M_yes <-meanRQ_M_yes %>% filter(trt == "yes") 
+
+meanRQ_M_no <-samples %>% filter(sex == "M") 
+meanRQ_M_no <-meanRQ_M_no %>% filter(trt == "no") 
+
+t.test(meanRQ_M_no$mean_RQ, meanRQ_M_yes$mean_RQ)
+
+meanH2O_F_yes <-samples %>% filter(sex == "F") 
+meanH2O_F_yes <-meanH2O_F_yes %>% filter(trt == "yes") 
+
+meanH2O_F_no <-samples %>% filter(sex == "F") 
+meanH2O_F_no <-meanH2O_F_no %>% filter(trt == "no") 
+
+t.test(meanH2O_F_no$mean_H2Og, meanH2O_F_yes$mean_H2Og)
+
+meanH2O_M_yes <-samples %>% filter(sex == "M") 
+meanH2O_M_yes <-meanH2O_M_yes %>% filter(trt == "yes") 
+
+meanH2O_M_no <-samples %>% filter(sex == "M") 
+meanH2O_M_no <-meanH2O_M_no %>% filter(trt == "no") 
+
+t.test(meanH2O_M_no$mean_H2Og, meanH2O_M_yes$mean_H2Og)
+
+```
+
 ### DESeq data creation 
 ```{r DESEQ creation}
 
@@ -248,8 +319,12 @@ all(rownames(samples) == colnames(countdata))
 # crea DESeq dataset
 dds <- DESeqDataSetFromMatrix(countData = countdata,
                                        colData = samples,
-                                       design = ~ sex + tissue +trt)
+                                       design = ~ sex + tissue + trt)
 
+dds <- estimateSizeFactors(dds)
+idx <- rowSums(counts(dds, normalized=TRUE) >= 10 ) >= 8
+
+dds <- dds[idx,]
 ```
 
 
@@ -408,7 +483,7 @@ heatmap(all_Expr,
 ```
 
 ```{r}
-library(ggfortify)
+require(GGally)
 library(vegan)
 
 genes_for_cca <- read_csv("results/WGCNAresults/genes_for_cca.csv", col_names = FALSE)
@@ -416,21 +491,23 @@ all_Expr<- as.data.frame(all_Expr)
 
 #subset_all_Expr <- all_Expr %>% filter(rownames(all_Expr) %in% genes_for_cca$X1)
 
-t_subset_all_Expr <- t(all_Expr)
+t_subset_all_Expr <-t(all_Expr)
 samples<-as.data.frame(samples)
-traitData_V2 <- samples %>% dplyr::select(c("trt","pro_weight","mean_RQ","mean_EE","mean_H2Og","body_temp_3","sample","tissue", "sex","mouse_ID"))
+traitData_V2 <- samples %>% dplyr::select(c("trt","pro_weight","mean_RQ","mean_EE","mean_H2Og","body_temp_3","sample","tissue", "sex","Animal_ID"))
 
-traitData_V2 <- traitData_V2 |>
-    mutate(tt = fct_cross(trt, sex))
+#traitData_V2 <- traitData_V2 |>
+ #   mutate(tt = fct_cross(trt, sex, tissue))
 
-#traitData_V2$trt <- as.numeric(traitData_V2$trt)
-#traitData_V2$sex <- as.numeric(traitData_V2$sex)
+traitData_V2$trt <- as.factor(traitData_V2$trt)
+traitData_V2$sex <- as.factor(traitData_V2$sex)
 rownames(traitData_V2) <- traitData_V2$sample
 traitData_V2 <- subset(traitData_V2, select = -sample)
+traitData_V2$tissue <- as.factor(traitData_V2$tissue)
+traitData_V2$Animal_ID <- as.factor(traitData_V2$Animal_ID)
 
-cca_model <- cca(t_subset_all_Expr~tt*(pro_weight+mean_RQ+mean_EE+mean_H2Og+body_temp_3 + tissue) +Condition(mouse_ID),data = traitData_V2)
-unique(traitData_V2$tt)
-#cca_model <- cca(t_subset_all_Expr~tissue*(pro_weight+mean_RQ+mean_EE+mean_H2Og+body_temp_3),data = traitData_V2)
+#ggpairs(traitData_V2)
+
+cca_model <- cca(t_subset_all_Expr ~ trt+pro_weight+mean_RQ+mean_EE+mean_H2Og+body_temp_3 +sex +tissue,data = traitData_V2)
 
 #anova the model to find the significance of the terms
 #anova(cca_model)
@@ -442,8 +519,8 @@ unique(traitData_V2$tt)
 df_species  <- data.frame(summary(cca_model)$species[,1:2])# get the genes CC1 and CC2 scores
 
 sd <- sd(df_species$CCA1)
-out_ind1 <- df_species %>% filter(CCA1 > sd*3)
-out_ind2 <- df_species %>% filter(CCA1 < -(sd*3))
+out_ind1 <- df_species %>% filter(CCA1 > sd*2)
+out_ind2 <- df_species %>% filter(CCA1 < -(sd*2))
 
 sd <- sd(df_species$CCA2)
 out_ind3 <- df_species %>% filter(CCA2 > sd*3)
@@ -451,6 +528,8 @@ out_ind4 <- df_species %>% filter(CCA2 < -(sd*3))
 
 #put the 3sd (99% confidence) from the genes are in a GO analysis
 out <- distinct(rbind(out_ind1,out_ind2,out_ind3,out_ind4))
+
+write.table(out, "results/cca_outliers.csv", row.names = TRUE, sep = "\t")
 out$color <- "outlier"
 
 norm <- df_species[!(row.names(df_species) %in% rownames(out)),]
@@ -459,7 +538,7 @@ norm$color <- "in bound"
 graphing_data <- as.data.frame(rbind(norm,out))
 
 df_sites  <- data.frame(summary(cca_model)$sites[,1:2])# get the indivisuals CC1 and CC2 scores
-df_environ  <- scores(summary(cca_model)$biplot[c(4,7),1:2]) #get the physio vars CC1 and CC2 scores
+df_environ  <- data.frame(scores(summary(cca_model)$biplot[c(2,5),1:2])) #get the physio vars CC1 and CC2 scores
 
 df_tissue  <- scores(summary(cca_model)$centroids[,1:2]) #get the tissue centriod vars CC1 and CC2 scores
 
@@ -469,10 +548,11 @@ rc <- function (u) paste0(u[c(3,4)], collapse = "_")
 df_sites$lable <- unlist(lapply(strsplit(rownames(df_sites), split = "_"),rc))
 
 CCA1_varex<-round(summary(cca_model)$cont$importance[2,1]*100,2) #Get percentage of variance explained by first axis
-cca2_varex<-round(summary(cca_model)$cont$importance[2,2]*100,2) #Get percentage of variance explained by second axis
+CCA2_varex<-round(summary(cca_model)$cont$importance[2,2]*100,2) #Get percentage of variance explained by second axis
 
 #Set a scaling variable to multiply the CCA values, in order to get a very similar plot to the the one generated by plot(cca_model). You can adjust it according to your data
 scaling_factor <- 2
+library(paletteer)
 
 cca_plot <- ggplot(df_species, 
        aes(x=CCA1, y=CCA2)) + 
@@ -516,15 +596,34 @@ cca_plot <- ggplot(df_species,
             color="black")+
   #Set bw theme
   theme_bw()+
-  xlim(-0.8, 0.7)+
-  ylim(-0.5, 0.6)+
+  scale_color_paletteer_d("ggthemes_ptol::qualitative", 12,direction = 1)+
+  xlim(-0.8, 0.5)+
+  ylim(-0.4, 0.7)+
   #Set x and y axis titles
   labs(x=paste0("CCA1 (",CCA1_varex," %)"),
-       y=paste0("CCA2 (",cca2_varex," %)"))
+       y=paste0("CCA2 (",CCA2_varex," %)"))
 
 cca_plot
 ```
 
+
+
+```{r}
+rownames(out)
+library(gprofiler2)
+#library(gProfileR)
+
+gostres <- gost(query = rownames(out), 
+                organism = "hsapiens", ordered_query = FALSE, 
+                multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
+                measure_underrepresentation = FALSE, evcodes = FALSE, 
+                user_threshold = 0.05, correction_method = "g_SCS", 
+                domain_scope = "annotated", custom_bg = NULL, 
+                numeric_ns = "", sources = NULL, as_short_link = FALSE, highlight = TRUE)
+
+gostplot(gostres, capped = TRUE, interactive = TRUE)
+
+```
 
 
 ## now you have normalized read counts - yay!

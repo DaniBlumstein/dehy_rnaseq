@@ -71,6 +71,8 @@ hyp_dds_trt <- hyp_dds_trt[!rownames(hyp_dds_trt) == "NULL", ]
 hyp_dds_trt <- estimateSizeFactors(hyp_dds_trt)
 normalized_counts <- vst(hyp_dds_trt, blind = FALSE)
 hyp_Expr <- assay(normalized_counts)
+
+hyp <- heatmap(hyp_Expr,Rowv=NA, col=rev(brewer.pal(9,"RdBu")))
 ```
 ## now you have normalized read counts - yay!
 
@@ -299,8 +301,8 @@ for (mod in 1:ncol(geneModuleMembership_hyp))
 }
 
 geneInfo0_hyp$ensembl <- rownames(geneInfo0_hyp)
-geneInfo0_hyp <- merge(geneInfo0_hyp, annos, by.x = "ensembl", by.y = "ensembl")
-geneInfo0_hyp$ensid <- NULL
+#geneInfo0_hyp <- merge(geneInfo0_hyp, annos, by.x = "ensembl", by.y = "ensembl")
+#geneInfo0_hyp$ensid <- NULL
 
 write.csv(geneInfo0_hyp, file="results/WGCNAresults/ALLSAMPLES_hyp_wgcna_gene_module_membership_pearson_signed.csv")
 ```

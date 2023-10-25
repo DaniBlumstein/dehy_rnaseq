@@ -49,10 +49,10 @@ kid_dds_trt <- DESeqDataSetFromMatrix(countData = kid_countdata,
 
 #filter out genes where there are less than 8 samples with normalized counts greater than or equal to 10.
 kid_dds_trt <- estimateSizeFactors(kid_dds_trt)
-idx <- rowSums(counts(kid_dds_trt, normalized=TRUE) >= 10 ) >= 8
+#idx <- rowSums(counts(kid_dds_trt, normalized=TRUE) >= 10 ) >= 8
 
-kid_dds_trt <- kid_dds_trt[idx,]
-print(paste("Number of genes after filtering by total expression:", nrow(kid_dds_trt)))
+#kid_dds_trt <- kid_dds_trt[idx,]
+#print(paste("Number of genes after filtering by total expression:", nrow(kid_dds_trt)))
 matrix <- as.data.frame(counts(kid_dds_trt))
 
 #kid_dds_trt$trt_combo <- factor(paste0(kid_dds_trt$trt, kid_dds_trt$sex))
@@ -70,6 +70,8 @@ kid_dds_trt <- kid_dds_trt[!rownames(kid_dds_trt) == "NULL", ]
 kid_dds_trt <- estimateSizeFactors(kid_dds_trt)
 normalized_counts <- vst(kid_dds_trt, blind = FALSE)
 kid_Expr <- assay(normalized_counts)
+
+kid <- heatmap(kid_Expr,Rowv=NA, col=rev(brewer.pal(9,"RdBu")))
 ```
 ## now you have normalized read counts - yay!
 
@@ -83,7 +85,7 @@ kid_Expr <- assay(normalized_counts)
 #kid_Expr <- subset(normalized_counts, subset = rownames(normalized_counts) %in% kidref)
 
 #Remove gene information and transpose the expression data
-#rownames(kid_Expr)<-NULL
+rownames(kid_Expr)<-NULL
 kid_Expr <- t(kid_Expr)
 
 ##########check included genes#########
@@ -103,7 +105,6 @@ traitData_kid$sex <- as.numeric(as.factor(traitData_kid$sex))
 # Choose columns of trait dataset to be used in downstream analyses
 colnames(traitData_kid)
 traitData_kid <- traitData_kid %>% dplyr::select(c('sex','total_weight_delta',"pro_weight","Na","BUN","AnGap","K","Crea","Hct","Cl","Glu","Hb*","TCO2","iCa","trt","mean_RQ","mean_EE","mean_H2Og","body_temp_3"))
-#traitData_kid <- 'row.names<-'(traitData_kid, traitData_kid$sample)
 traitData_kid <- as.data.frame(lapply(traitData_kid, as.numeric))
 ```
 
@@ -122,6 +123,7 @@ thresholdZ.k=-4 # often -2.5
 # the color vector indicates outlyingness (red)
 outlierColor_kid <- ifelse(Z.k_kid<thresholdZ.k,"red","black")
 
+library(flashClust)
 # calculate the cluster tree using flashClust or hclust
 sampleTree_kid <- flashClust(as.dist(1-A_kid), method = "average")
 # Convert traits to a color representation:
@@ -163,6 +165,8 @@ text(sft_kid$fitIndices[,1],sft_kid$fitIndices[,5],labels=powers,col="red", cex=
 ##########I'm choosing 15 for my power based on scale independence and k for kid ###########
 
 ###########Automatic module detection via dynamic cutting
+dim(kid_Expr)
+
 
 mergingThresh = 0.25
 net_kid = blockwiseModules(kid_Expr,corType="pearson",
@@ -297,14 +301,16 @@ write.csv(modTraitP_kid, file="results/WGCNAresults/ALLSAMPLES_kid_MEs_P_Pearson
 ```
 
 ```{r}
-for ( col in 1:ncol(ME.dissimilarity)){
-    colnames(ME.dissimilarity)[col] <-  sub("ME", "", colnames(ME.dissimilarity)[col])
+for (row in 1:nrow(modTraitP_kid)){
+    rownames(modTraitP_kid)[row] <-  sub("ME", "", rownames(modTraitP_kid)[row])
 }
+ 
+color_counts <- as.data.frame(table(moduleColorsAutomatic_kid))
+modTraitP_kid_df <- as.data.frame(modTraitP_kid)
+modTraitP_kid_df <- tibble::rownames_to_column(modTraitP_kid_df, "moduleColorsAutomatic_kid")
 
-for ( row in 1:nrow(ME.dissimilarity)){
-    rownames(ME.dissimilarity)[row] <-  sub("ME", "", rownames(ME.dissimilarity)[row])
-}
-
+merge(modTraitP_kid_df, color_counts, by="moduleColorsAutomatic_kid", modTraitP_kid_df=TRUE)
+  
 nodes <- as.data.frame(table(moduleColorsAutomatic_kid))
 links <- melt(ME.dissimilarity)
 data_zero <- filter_if(links, is.numeric, all_vars((.) != 0))
@@ -380,8 +386,8 @@ for (mod in 1:ncol(geneModuleMembership_kid))
                           paste("p.MM.", modNames_kid[modOrder[mod]], sep=""))
 }
 
-geneInfo0_kid$ensembl <- rownames(geneInfo0_kid)
-geneInfo0_kid <- merge(geneInfo0_kid, annos, by.x = "ensembl", by.y = "ensembl")
+#geneInfo0_kid$ensembl <- rownames(geneInfo0_kid)
+#geneInfo0_kid <- merge(geneInfo0_kid, annos, by.x = "ensembl", by.y = "ensembl")
 geneInfo0_kid$ensid <- NULL
 
 write.csv(geneInfo0_kid, file="results/WGCNAresults/ALLSAMPLES_kid_wgcna_gene_module_membership_pearson_signed.csv")
@@ -392,13 +398,13 @@ GO
 ```{r}
 mods <- unique(geneInfo0_kid$moduleColor)
 #removing colors getting stuck on FDR = 0.05
-mods <- mods[- 4] 
-mods <- mods[- 5]  
-mods <- mods[- 9] 
-mods <- mods[- 10]
-mods <- mods[- 10]
-mods <- mods[- 10]
-mods <- mods[- 11]
+#mods <- mods[- 4] 
+#mods <- mods[- 5]  
+#mods <- mods[- 9] 
+#mods <- mods[- 10]
+#mods <- mods[- 10]
+#mods <- mods[- 10]
+#mods <- mods[- 11]
 
 for (color in mods) 
   {

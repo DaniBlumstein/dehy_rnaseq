@@ -71,6 +71,8 @@ annos$ensembl <- as.character(annos$ensid)
 lu_dds_trt <- estimateSizeFactors(lu_dds_trt)
 normalized_counts <- vst(lu_dds_trt, blind = FALSE)
 lu_Expr <- assay(normalized_counts)
+
+lu <- heatmap(lu_Expr,Rowv=NA, col=rev(brewer.pal(9,"RdBu")))
 ```
 ## now you have normalized read counts - yay!
 
@@ -299,8 +301,8 @@ for (mod in 1:ncol(geneModuleMembership_lu))
 }
 
 geneInfo0_lu$ensembl <- rownames(geneInfo0_lu)
-geneInfo0_lu <- merge(geneInfo0_lu, annos, by.x = "ensembl", by.y = "ensembl")
-geneInfo0_lu$ensid <- NULL
+#geneInfo0_lu <- merge(geneInfo0_lu, annos, by.x = "ensembl", by.y = "ensembl")
+#geneInfo0_lu$ensid <- NULL
 
 write.csv(geneInfo0_lu, file="results/WGCNAresults/ALLSAMPLES_lu_wgcna_gene_module_membership_pearson_signed.csv")
 ```

@@ -71,6 +71,8 @@ gi_dds_trt <- gi_dds_trt[!rownames(gi_dds_trt) == "NULL", ]
 gi_dds_trt <- estimateSizeFactors(gi_dds_trt)
 normalized_counts <- vst(gi_dds_trt, blind = FALSE)
 gi_Expr <- assay(normalized_counts)
+
+gi <- heatmap(gi_Expr,Rowv=NA, col=rev(brewer.pal(9,"RdBu")))
 ```
 ## now you have normalized read counts - yay!
 
@@ -133,7 +135,6 @@ dimnames(traitColors)[[2]] = paste(names(traitData_gi))
 datColors = data.frame(outlier = outlierColor_gi,traitColors)
 plotDendroAndColors(sampleTree_gi,groupLabels=names(datColors),
                     colors=datColors,main="Sample Dendrogram and Trait Heatmap")
-dev.off()
 ```
 
 
@@ -223,7 +224,7 @@ par(mar = c(6, 8.5, 3, 3))
 labeledHeatmap(Matrix = modTraitCor_gi, xLabels = names(traitData_gi),
                yLabels = names(MEs_gi), ySymbols = names(MEs_gi), 
                colorLabels =FALSE,colors=blueWhiteRed(50),textMatrix=textMatrix_gi,
-               setStdMargins = FALSE, cex.text = 0.4, zlim = c(-1,1),
+              cex.text = 0.4, zlim = c(-1,1),
                main = paste("Module-trait relationships, gi"))
 png("figures/gi_WGCNA_heatmap.png", width = 9.5, height = 12, units = "in", res = 300)
 ```
@@ -299,8 +300,8 @@ for (mod in 1:ncol(geneModuleMembership_gi))
 }
 
 geneInfo0_gi$ensembl <- rownames(geneInfo0_gi)
-geneInfo0_gi <- merge(geneInfo0_gi, annos, by.x = "ensembl", by.y = "ensembl")
-geneInfo0_gi$ensid <- NULL
+#geneInfo0_gi <- merge(geneInfo0_gi, annos, by.x = "ensembl", by.y = "ensembl")
+#geneInfo0_gi$ensid <- NULL
 
 write.csv(geneInfo0_gi, file="results/WGCNAresults/ALLSAMPLES_gi_wgcna_gene_module_membership_pearson_signed.csv")
 ```

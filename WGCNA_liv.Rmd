@@ -71,6 +71,8 @@ liv_dds_trt <- liv_dds_trt[!rownames(liv_dds_trt) == "NULL", ]
 liv_dds_trt <- estimateSizeFactors(liv_dds_trt)
 normalized_counts <- vst(liv_dds_trt, blind = FALSE)
 liv_Expr <- assay(normalized_counts)
+
+liv <- heatmap(liv_Expr,Rowv=NA, col=rev(brewer.pal(9,"RdBu")))
 ```
 ## now you have normalized read counts - yay!
 
@@ -299,8 +301,8 @@ for (mod in 1:ncol(geneModuleMembership_liv))
 }
 
 geneInfo0_liv$ensembl <- rownames(geneInfo0_liv)
-geneInfo0_liv <- merge(geneInfo0_liv, annos, by.x = "ensembl", by.y = "ensembl")
-geneInfo0_liv$ensid <- NULL
+#geneInfo0_liv <- merge(geneInfo0_liv, annos, by.x = "ensembl", by.y = "ensembl")
+#geneInfo0_liv$ensid <- NULL
 
 write.csv(geneInfo0_liv, file="results/WGCNAresults/ALLSAMPLES_liv_wgcna_gene_module_membership_pearson_signed.csv")
 ```

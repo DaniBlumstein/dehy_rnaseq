@@ -1,0 +1,604 @@
+---
+title: "test"
+author: "Dani Blumstein"
+date: "2023-08-18"
+output: html_document
+---
+
+```{r}
+all_Expr
+traitData <- samples %>% dplyr::select(c("sample",'sex',"trt","tissue",'total_weight_delta',"pro_weight","Na","BUN","AnGap","K","Crea","Hct","Cl","Glu","Hb*","TCO2","iCa",,"mean_RQ","mean_EE","mean_H2Og","body_temp_3"))
+rownames(traitData) <- traitData$sample
+
+all_ExprT <- t(all_Expr)
+
+##########check included genes#########
+gsg = goodSamplesGenes(all_ExprT, verbose = 3);
+gsg$allOK
+```
+
+analysis attempt v1
+```{r}
+#BiocManager::install("omicade4")
+library(omicade4)
+data(NCI60_4arrays)
+
+rc <- function (u) paste0(u[c(1,2,4)], collapse = "_")
+#make col names just the individual IDs
+#make sure all the matrixs have the same individuals 
+for ( col in 1:ncol(lu_Expr)){
+    colnames(lu_Expr)[col] <-  sub("X*", "", colnames(lu_Expr)[col])
+}
+colnames(lu_Expr) <- unlist(lapply(strsplit(colnames(lu_Expr), split = "_"),rc))
+
+for ( col in 1:ncol(liv_Expr)){
+    colnames(liv_Expr)[col] <-  sub("X*", "", colnames(liv_Expr)[col])
+}
+colnames(liv_Expr) <- unlist(lapply(strsplit(colnames(liv_Expr), split = "_"),rc))
+
+for ( col in 1:ncol(kid_Expr)){
+    colnames(kid_Expr)[col] <-  sub("X*", "", colnames(kid_Expr)[col])
+}
+colnames(kid_Expr) <- unlist(lapply(strsplit(colnames(kid_Expr), split = "_"),rc))
+
+for ( col in 1:ncol(gi_Expr)){
+    colnames(gi_Expr)[col] <-  sub("X*", "", colnames(gi_Expr)[col])
+}
+colnames(gi_Expr) <- unlist(lapply(strsplit(colnames(gi_Expr), split = "_"),rc))
+
+for ( col in 1:ncol(hyp_Expr)){
+    colnames(hyp_Expr)[col] <-  sub("X*", "", colnames(hyp_Expr)[col])
+}
+colnames(hyp_Expr) <- unlist(lapply(strsplit(colnames(hyp_Expr), split = "_"),rc))
+
+
+
+lst <- list(colnames(lu_Expr),colnames(liv_Expr),colnames(kid_Expr),colnames(hyp_Expr),colnames(gi_Expr))
+ids_2_keep <- Reduce(intersect, lst)
+
+rc <- function (u) paste0(u[c(2,3)], collapse = "_")
+
+filteredkid <- kid_Expr[,colnames(kid_Expr) %in% ids_2_keep]
+colnames(filteredkid) <- unlist(lapply(strsplit(colnames(filteredkid), split = "_"),rc))
+
+filteredlu <- lu_Expr[,colnames(lu_Expr) %in% ids_2_keep]
+colnames(filteredlu) <- unlist(lapply(strsplit(colnames(filteredlu), split = "_"),rc))
+
+filteredliv <- liv_Expr[,colnames(liv_Expr) %in% ids_2_keep]
+colnames(filteredliv) <- unlist(lapply(strsplit(colnames(filteredliv), split = "_"),rc))
+
+filteredgi <- gi_Expr[,colnames(gi_Expr) %in% ids_2_keep]
+colnames(filteredgi) <- unlist(lapply(strsplit(colnames(filteredgi), split = "_"),rc))
+
+filteredhyp <- hyp_Expr[,colnames(hyp_Expr) %in% ids_2_keep]
+colnames(filteredhyp) <- unlist(lapply(strsplit(colnames(filteredhyp), split = "_"),rc))
+
+matlist <- list(kid=filteredkid,lu=filteredlu,liv=filteredliv,gi=filteredgi,hyp=filteredhyp)
+
+colnames(filteredkid)
+
+sapply(matlist, dim)
+
+all(apply((x <- sapply(matlist, colnames))[,-1], 2, function(y) + identical(y, x[,1])))
+ 
+layout(matrix(1:5, 1, 5))
+par(mar=c(2, 1, 0.1, 6))
+for (df in matlist) 
+{
+ d <- dist(t(df))
+ hcl <- hclust(d)
+ dend <- as.dendrogram(hcl)
+ plot(dend, horiz=TRUE)
+}
+
+rc <- function (u) paste0(u[c(1,2)], collapse = "_")
+
+mcoin <- mcia(matlist, cia.nf=10)
+trt <- colnames(matlist$kid)
+trt <- sapply(strsplit(trt, split = "_"),rc)
+
+plot(mcoin, axes=1:2, phenovec=trt, sample.lab=FALSE, df.color=1:5)
+plot(mcoin, axes=c(1,3), phenovec=trt, sample.lab=FALSE, df.color=1:5)
+
+no_gene <- selectVar(mcoin, a1.lim=c(-0.5, Inf), a2.lim=c(-Inf, Inf))
+no_gene_filtered <- no_gene[no_gene$stat==5,]
+```
+
+analysis attempt v2
+```{r}
+all_Expr<- as.data.frame(all_Expr)
+rc <- function (u) paste0(u[c(3)], collapse = "_")
+
+yes <- dplyr::select(all_Expr, contains("yes"))
+F_yes <- dplyr::select(yes, contains("F"))
+colnames(F_yes) <- unlist(lapply(strsplit(colnames(F_yes), split = "_"),rc))
+table(colnames(F_yes))
+filtered_F_yes <- subset(F_yes)
+table(colnames(filtered_F_yes))
+new_order = sort(colnames(filtered_F_yes),decreasing=TRUE)
+filtered_F_yes <- filtered_F_yes[, new_order]
+
+M_yes <- dplyr::select(yes, contains("M"))
+colnames(M_yes) <- unlist(lapply(strsplit(colnames(M_yes), split = "_"),rc))
+table(colnames(M_yes))
+filtered_M_yes <- subset(M_yes, select = c(-1,-2,-8,-4,-3,-6))
+table(colnames(filtered_M_yes))
+new_order = sort(colnames(filtered_M_yes),decreasing=TRUE)
+filtered_M_yes <- filtered_M_yes[, new_order]
+
+no <- dplyr::select(all_Expr, contains("no"))
+F_no <- dplyr::select(no, contains("F"))
+colnames(F_no) <- unlist(lapply(strsplit(colnames(F_no), split = "_"),rc))
+table(colnames(F_no))
+filtered_F_no <- subset(F_no, select = c(-1,-5,-2,-7,-12))
+table(colnames(filtered_F_no))
+new_order = sort(colnames(filtered_F_no),decreasing=TRUE)
+filtered_F_no <- filtered_F_no[, new_order]
+
+M_no <- dplyr::select(no, contains("M"))
+colnames(M_no) <- unlist(lapply(strsplit(colnames(M_no), split = "_"),rc))
+table(colnames(M_no))
+filtered_M_no <- subset(M_no)
+table(colnames(filtered_M_no))
+new_order = sort(colnames(filtered_M_no),decreasing=TRUE)
+filtered_M_no <- filtered_M_no[, new_order]
+
+matlist <- list(F_yes=filtered_F_yes,M_yes=filtered_M_yes,F_no=filtered_F_no,M_no=filtered_M_no)
+sapply(matlist, dim)
+
+all(apply((x <- sapply(matlist, colnames))[,-1], 2, function(y) + identical(y, x[,1])))
+ 
+layout(matrix(1:4, 1, 4))
+par(mar=c(2, 1, 0.1, 6))
+for (df in matlist) 
+{
+ d <- dist(t(df))
+ hcl <- hclust(d)
+ dend <- as.dendrogram(hcl)
+ plot(dend, horiz=TRUE)
+}
+
+
+mcoin <- mcia(matlist, cia.nf=10)
+tissue <- colnames(matlist$F_yes)
+tissue <- sapply(strsplit(tissue, split="\\."), function(x) x[1])
+
+plot(mcoin, axes=1:2, phenovec=tissue, sample.lab=FALSE, df.color=1:4)
+plot(mcoin, axes=c(3,4), phenovec=tissue, sample.lab=FALSE, df.color=1:4)
+
+no_gene <- selectVar(mcoin, a1.lim=c(-0.5, Inf), a2.lim=c(-Inf, Inf))
+no_gene_filtered <- no_gene[no_gene$stat==5,]
+```
+
+
+```{r}
+#install.packages("fastTopics")
+library(fastTopics)
+
+countdata_p <- countdata %>% mutate(countdata = replace(countdata, which(countdata<0), NA))
+countdata_m <- as.matrix(countdata_p)
+countdata_m<-na.omit(countdata_m)
+
+fit <- fit_topic_model(t(countdata_m),k = 5)
+
+annotation <- data.frame(
+  sample_id = paste0(rownames(fit$L)),
+  tissue_label = factor(str_split_fixed(rownames(fit$L), '_',4)[,3],
+                        levels= rev(c("kid", "liv", "lu", "hyp", "gi"))))
+
+rownames(fit$L) <- as.factor(annotation$tissue_label)
+
+topic_colors <- c("skyblue","forestgreen","darkmagenta","dodgerblue",
+                 "darkorange")
+
+structure_plot(fit,colors = topic_colors,topics = 1:5,gap = 25,
+               grouping = annotation$tissue_labe)
+
+pca <- prcomp(fit$L)$x
+clusters <- kmeans(pca,centers = 5,iter.max = 100)$cluster
+summary(factor(clusters))
+clusters <- factor(clusters)
+
+levels(clusters) <- c("kid","liv","lu","hyp","gi")
+
+structure_plot(fit,colors = topic_colors)
+
+structure_plot(fit,colors = topic_colors,topics = 1:5,gap = 25,
+               grouping = clusters)
+
+pca_plot(fit,fill = clusters) +
+  scale_fill_manual(values = topic_colors)
+
+pca_hexbin_plot(fit,bins = 24)
+
+fit$L
+fit$F
+
+de <- de_analysis(fit,t(countdata_m),pseudocount = 0.1,
+                  control = list(ns = 1e4,nc = 5))
+
+plist_electro <- list()
+plist_electro[["t1"]] <- volcano_plot(de,k = 1)
+plist_electro[["t2"]] <- volcano_plot(de,k = 2)
+plist_electro[["t3"]] <- volcano_plot(de,k = 3)
+plist_electro[["t4"]] <- volcano_plot(de,k = 4)
+plist_electro[["t5"]] <- volcano_plot(de,k = 5)
+
+plots <- gridExtra::grid.arrange(grobs = plist_electro, nrow=3, ncol=2)
+#,labels = de$ar)
+```
+
+
+```{r}
+#### filter samples ########
+A_all=adjacency(t(all_Expr),type="distance")
+# this calculates the whole network connectivity
+k_all=as.numeric(apply(A_all,2,sum))-1
+# standardized connectivity
+Z.k_all=scale(k_all)
+
+# Designate samples as outlying
+# if their Z.k value is below the threshold
+thresholdZ.k=-4 # often -2.5
+
+# the color vector indicates outlyingness (red)
+outlierColor_all <- ifelse(Z.k_all<thresholdZ.k,"red","black")
+
+# calculate the cluster tree using flashClust or hclust
+sampleTree_all <- flashClust(as.dist(1-A_all), method = "average")
+# Convert traitData to a color representation:
+# where red indicates high values
+traitData <- subset(traitData, select=-c(sample))
+
+traitColors = data.frame(numbers2colors(traitData,signed=FALSE))
+dimnames(traitColors)[[2]] = paste(names(traitData))
+datColors = data.frame(outlier = outlierColor_all,traitColors)
+plotDendroAndColors(sampleTree_all,groupLabels=names(datColors),
+                    colors=datColors,main="Sample Dendrogram and Trait Heatmap")
+```
+
+```{r}
+#restrt_lu
+#restrt_liv
+#restrt_gi
+#restrt_hyp
+#restrt_kid
+library(RColorBrewer)
+
+kid_lfc <- as.data.frame(cbind(rownames(restrt_kid),restrt_kid$padj, restrt_kid$log2FoldChange))
+kid_lfc <- kid_lfc %>% rename(ensembl = V1,padj_kid = V2,log2FoldChange_kid = V3)
+kid_lfc$ensembl <- as.factor(kid_lfc$ensembl)
+
+hyp_lfc <- as.data.frame(cbind(rownames(restrt_hyp),restrt_hyp$padj, restrt_hyp$log2FoldChange))
+hyp_lfc <- hyp_lfc %>% rename(ensembl = V1,padj_hyp = V2,log2FoldChange_hyp = V3)
+hyp_lfc$ensembl <- as.factor(hyp_lfc$ensembl)
+
+gi_lfc <- as.data.frame(cbind(rownames(restrt_gi),restrt_gi$padj, restrt_gi$log2FoldChange))
+gi_lfc <- gi_lfc %>% rename(ensembl = V1,padj_gi = V2,log2FoldChange_gi = V3)
+gi_lfc$ensembl <- as.factor(gi_lfc$ensembl)
+
+liv_lfc <- as.data.frame(cbind(rownames(restrt_liv),restrt_liv$padj, restrt_liv$log2FoldChange))
+liv_lfc <- liv_lfc %>% rename(ensembl = V1,padj_liv = V2,log2FoldChange_liv = V3)
+liv_lfc$ensembl <- as.factor(liv_lfc$ensembl)
+
+lu_lfc <- as.data.frame(cbind(rownames(restrt_lu),restrt_lu$padj, restrt_lu$log2FoldChange))
+lu_lfc <- lu_lfc %>% rename(ensembl = V1,padj_lu = V2,log2FoldChange_lu = V3)
+lu_lfc$ensembl <- as.factor(lu_lfc$ensembl)
+
+lfc_merge1 <- merge(kid_lfc, hyp_lfc, by = "ensembl",all.x = TRUE)
+lfc_merge2 <- merge(lfc_merge1,gi_lfc,by = "ensembl",all.x = TRUE)
+lfc_merge3 <- merge(lfc_merge2,liv_lfc,by = "ensembl",all.x = TRUE)
+lfc_merge4 <- merge(lfc_merge3,lu_lfc,by = "ensembl",all.x = TRUE)
+lfc_merge <- merge(lfc_merge4,annos,by = "ensembl",all.x = TRUE)
+lfc_merge$ensid <- NULL
+lfc_merge$ensembl <- NULL
+lfc_merge$transcript <- NULL
+lfc_merge$Gene <- NULL
+lfc_merge <- lfc_merge %>% distinct(gene, .keep_all = TRUE)
+rownames(lfc_merge) <- lfc_merge$gene
+lfc_merge$gene <- NULL
+
+
+data_FC <- as.data.frame(cbind(rownames(lfc_merge),lfc_merge$log2FoldChange_kid,lfc_merge$log2FoldChange_hyp, lfc_merge$log2FoldChange_gi, lfc_merge$log2FoldChange_liv, lfc_merge$log2FoldChange_lu))
+
+data_FC <- data_FC %>% rename(gene = V1,kid = V2,hyp = V3,gi=V4,liv=V5, lu=V6)
+data_file <- reshape2::melt(data_FC,measure.vars = c("kid", "hyp", "gi","liv","lu"))
+
+data_Pval<- as.data.frame(cbind(rownames(lfc_merge),lfc_merge$padj_kid,lfc_merge$padj_hyp, lfc_merge$padj_gi, lfc_merge$padj_liv, lfc_merge$padj_lu))
+
+data_Pval <- data_Pval %>% rename(gene = V1,kid = V2,hyp = V3,gi=V4,liv=V5, lu=V6)
+data_Pval <- reshape2::melt(data_Pval,measure.vars = c("kid", "hyp", "gi","liv","lu"))
+data_file$pval <- as.numeric(data_Pval$value)
+data_file$value <- as.numeric(data_file$value)
+
+data_file= data_file[!apply(data_file[,2:3] == 0, 1, FUN = any, na.rm = TRUE),]
+rownames(data_file) <- NULL
+
+data_file$labels=round(data_file$value,3)
+
+theme<-theme(panel.background = element_blank(),panel.border=element_blank(),axis.line = element_line(colour = "black"),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),
+             strip.background=element_blank(),axis.text.x=element_text(colour="black",size=16),axis.text.y=element_text(colour="black",size=16),
+             axis.ticks=element_line(colour="black"),plot.margin=unit(c(1,1,1,1),"line"))
+
+
+grey= unique(subset(data_file,data_file$pval>=0.05)[c("variable", "labels","gene")])
+color= unique(subset(data_file,data_file$pval<0.05)[c("variable", "labels","gene")])
+grey$direction[grey$labels<0]="down"
+grey$direction[grey$labels>=0]="up"
+
+color$direction[color$labels<0]="down"
+color$direction[color$labels>=0]="up"
+
+cbPalette = c("#BF4343", "#4E9571")
+
+ggplot(data = grey , aes(x = labels, y = variable)) +
+  geom_jitter(color = "darkgrey", size = 1.25,height = 0.3) +
+  geom_jitter(
+    data = color,
+    aes(x = labels, y = variable,color=direction), size = 1.3,height = 0.3) + scale_color_manual(values = cbPalette) +
+  scale_x_continuous(breaks = pretty(data_file$value, n = 10)) +  labs(title= "", x= "\nLog2FC", y= "") + 
+  coord_cartesian(xlim = c(-10, 10)) +
+  theme(
+    axis.title.x = element_text( size=16 ),
+    axis.title.y = element_text(size=16)) +
+  #geom_text_repel(aes(label = gene), hjust=0, vjust=0,size=3,parse=TRUE)+
+  theme 
+```
+
+```{r}
+traitData$tissue <- as.factor(traitData$tissue )
+
+nodes <- traitData
+links <- melt(sampleDistMatrix)
+
+net<- graph_from_data_frame(d=links, vertices=nodes, directed=T) 
+
+net <- simplify(net, remove.multiple = F, remove.loops = T) 
+colrs <- c("skyblue","forestgreen","darkmagenta","dodgerblue","darkorange")
+my_color <- colrs[as.numeric(as.factor(nodes$tissue))]
+
+shapes <- c("square", "circle")
+my_shapes <- shapes[as.numeric(as.factor(nodes$trt))]
+
+
+#E(net)$width <- E(net)$value/6
+V(net)$label <- NA
+graph_attr(net, "layout") <- layout_with_kk
+
+
+hist(links$value)
+mean(links$value)
+sd(links$value)
+
+cut.off <- mean(links$value) 
+net.sp <- delete_edges(net, E(net)[value<cut.off])
+
+#clp <- cluster_optimal(net.sp)
+#class(clp)
+
+# Community detection returns an object of class "communities" 
+# which igraph knows how to plot: 
+plot(net.sp,
+     edge.arrow.mode=0,
+     vertex.color=my_color,
+     vertex.size=10,
+     vertex.shape=my_shapes)
+
+
+legend(x="bottomleft", c("gastrointestinal tract","hypothalamus", "kidney", "liver","lung"), pch=21,
+       col="#777777", pt.bg=colrs, pt.cex=2, cex=.8, bty="n", ncol=1)
+
+
+
+
+####Explore different Layouts
+layouts <- grep("^layout_", ls("package:igraph"), value=TRUE)[-1]
+# Remove layouts that do not apply to our graph.
+layouts <- layouts[!grepl("merge|norm|sugiyama", layouts)]
+par(mfrow=c(3,3), mar=c(1,1,1,1))
+for (layout in layouts) {
+print(layout)
+l <- do.call(layout, list(net.sp))
+plot(net.sp, edge.arrow.mode=0, layout=l, main=layout) }
+```
+
+
+```{r}
+############ Choosing the soft threshold beta via scale free topology
+# Choose a set of soft thresholding powers
+powers=c(1:30) # in practice this should include powers up to 20.
+# choose power based on sft_JZ criterion
+sft_all=pickSoftThreshold(all_Expr,powerVector=powers, networkType = "signed")
+# Plot the results:
+
+par(mfrow=c(1,2))
+# sft_all index as a function of different powers
+plot(sft_all$fitIndices[,1],-sign(sft_all$fitIndices[,3])*sft_all$fitIndices[,2],
+     xlab="Soft Threshold (power)",ylab="sft_all, unsigned R^2",type="n",main=paste("Scale independence"))
+text(sft_all$fitIndices[,1],-sign(sft_all$fitIndices[,3])*sft_all$fitIndices[,2],
+     labels=powers,col="red", pch=1, cex=.50)
+# this line corresponds to using an R^2 cut-off of h
+abline(h=0.85,col="red")
+# Mean connectivity as a function of different powers
+plot(sft_all$fitIndices[,1],sft_all$fitIndices[,5],type="n",
+     xlab="Soft Threshold (power)",ylab="Mean Connectivity",main=paste("Mean connectivity"))
+text(sft_all$fitIndices[,1],sft_all$fitIndices[,5],labels=powers,col="red", cex=.50)
+
+```
+
+```{r}
+##########I'm choosing 15 for my power based on scale independence and k for all ###########
+
+###########Automatic module detection via dynamic cutting
+
+mergingThresh = 0.25
+net_all = blockwiseModules(all_Expr,corType="pearson",
+                          maxBlockSize=14000,networkType="signed hybrid",power=21,minModuleSize=20,
+                          mergeCutHeight=mergingThresh,numericLabels=F,saveTOMs=TRUE,
+                          pamRespectsDendro=FALSE,saveTOMFileBase="all_TEST")
+
+i<-as_data_frame(net_all$MEs, what = "both")
+clp <- cluster_optimal(i)
+class(clp)
+```
+
+```{r}
+moduleLabelsAutomatic_all=net_all$colors
+
+# Convert labels to colors for plotting
+moduleColorsAutomatic_all = labels2colors(moduleLabelsAutomatic_all)
+
+# A data frame with module eigengenes can be obtained as follows
+MEsAutomatic_all=net_all$MEs
+
+#this is proportional weight loss
+weight_g_all = as.data.frame(traitData$pro_weight)
+names(weight_g_all)="weight_g_all"
+
+GS.all=as.numeric(cor(all_Expr,traitData,use="p"))
+# This translates the numeric values into colors
+GS.allWColor_all=numbers2colors(GS.all,signed=T)
+
+blocknumber=1
+datColors_all=data.frame(moduleColorsAutomatic_all,GS.allWColor_all)[net_all$blockGenes[[blocknumber]],]
+
+# Plot the dendrogram and the module colors underneath
+plotDendroAndColors(net_all$dendrograms[[blocknumber]],colors=datColors_all,
+                    groupLabels=c("Module colors"),dendroLabels=FALSE,
+                    hang=0.03,addGuide=TRUE,guideHang=0.05)
+
+# Choose a module assignment
+moduleColors_all=moduleColorsAutomatic_all
+
+# Define numbers of genes and samples
+nGenesall = ncol(all_Expr)
+nSamplesall = nrow(all_Expr)
+
+# Recalculate MEs with color labels
+MEs0all = moduleEigengenes(all_Expr,moduleColors_all)$eigengenes
+
+MEs_all = orderMEs(MEs0all)
+modTraitCor_all = cor(MEs_all, traitData, use = "p")
+modTraitP_all = corPvalueStudent(modTraitCor_all, nSamplesall)
+
+#Since we have a moderately large number of modules and traitData,
+#a suitable graphical representation will help in reading
+#the table. We color code each association by the correlation value:
+# Will display correlations and their p-values
+textMatrix_all = paste(signif(modTraitCor_all, 2), "\n(",
+                      signif(modTraitP_all, 1), ")", sep = "")
+dim(textMatrix_all) = dim(modTraitCor_all)
+par(mar = c(6, 8.5, 3, 3))
+
+# Display the correlation values within a heatmap plot
+labeledHeatmap(Matrix = modTraitCor_all, xLabels = names(traitData),
+               yLabels = names(MEs_all), ySymbols = names(MEs_all), 
+               colorLabels =FALSE,colors=blueWhiteRed(50),textMatrix=textMatrix_all,
+               setStdMargins = FALSE, cex.text = 0.4, zlim = c(-1,1),
+               main = paste("Module-trait relationships, all"))
+png("figures/all_WGCNA_heatmap.png", width = 9.5, height = 12, units = "in", res = 300)
+```
+
+mod merging
+Now, using the new found measurements of dissimilarity, you can construct a cluster tree. You will also be adding a line at the height of .25. This height corresponds to a correlation of over 75%. Any branches below this line are more than 75% related, and you will thus be merging them!
+```{r}
+ME.dissimilarity = 1-cor(MEs0all, use="complete") #Calculate eigengene dissimilarity
+METree = hclust(as.dist(ME.dissimilarity), method = "average") #Clustering eigengenes 
+par(mar = c(0,4,2,0)) #seting margin sizes
+par(cex = 0.6);#scaling the graphic
+plot(METree)
+abline(h=.25, col = "red") #a height of .25 corresponds to correlation of .75
+
+merge <- mergeCloseModules(all_Expr, moduleColors_all, cutHeight = .25)
+# The merged module colors, assigning one color to each module
+mergedColors = merge$colors
+# Eigengenes of the new merged modules
+mergedMEs = merge$newMEs
+
+plotDendroAndColors(net_all$dendrograms[[blocknumber]], cbind(moduleColors_all, mergedColors), 
+c("Original Module", "Merged Module"),
+dendroLabels = FALSE, hang = 0.03,
+addGuide = TRUE, guideHang = 0.05,
+main = "Gene dendrogram and module colors for original and merged modules")
+```
+
+
+```{r}
+# Isolate weight from the clinical traitData
+pro_weight = as.data.frame(traitData$pro_weight);
+names(pro_weight) = "pro_weight"
+mean_H2Og = as.data.frame(traitData$mean_H2Og)
+names(mean_H2Og) = "mean_H2Og"
+# Add the weight to existing module eigengenes
+MET = orderMEs(cbind(MEs_all, pro_weight,mean_H2Og))
+# Plot the relationships among the eigengenes and the trait
+par(cex = 0.9)
+plotEigengeneNetworks(MET, "", marDendro = c(0,4,1,2), marHeatmap = c(5,4,1,2), cex.lab = 0.8, xLabelsAngle
+= 90)
+```
+
+
+
+```{r}
+############################write tables w/ corr info###################################################################
+modNames_all = substring(names(MEs_all), 3)
+geneModuleMembership_all = as.data.frame(cor(all_Expr, MEs_all, use = "p"));
+MMPvalue_all = as.data.frame(corPvalueStudent(as.matrix(geneModuleMembership_all), nSamplesall));
+names(geneModuleMembership_all) = paste("MM", modNames_all, sep="");
+names(MMPvalue_all) = paste("p.MM", modNames_all, sep="");
+genetraitDataignificance_all = as.data.frame(cor(all_Expr, weight_g_all, use = "p"));
+GSPvalue_all = as.data.frame(corPvalueStudent(as.matrix(genetraitDataignificance_all), nSamplesall));
+names(genetraitDataignificance_all) = paste("GS.", names(weight_g_all), sep="");
+names(GSPvalue_all) = paste("p.GS.", names(weight_g_all), sep="");
+
+All_module_correlations_all <- subset(signif(modTraitP_all, 1))
+W_module_correlations_all <- All_module_correlations_all[,1]
+W_module_adjusted_correlations_all <- p.adjust(W_module_correlations_all, method = "fdr")
+
+# (aka. module eigengene based connectivity kME):
+datKME_all=signedKME(all_Expr, MEs_all)
+melt(datKME_all)
+
+
+Module_eigengenes_all <- net_all$MEs
+rownames(MEs_all) <- rownames(all_Expr)
+write.csv(MEs_all, file="results/WGCNAresults/ALLSAMPLES_all_MEs_signed.csv")
+write.csv(modTraitP_all, file="results/WGCNAresults/ALLSAMPLES_all_MEs_P_Pearson.csv")
+```
+
+```{r}
+for ( col in 1:ncol(A_all)){
+    colnames(A_all)[col] <- substring(colnames(A_all)[col], 6)
+}
+
+for ( row in 1:nrow(A_all)){
+    rownames(A_all)[row] <-  substring(rownames(A_all)[row], 6)
+}
+
+g <- graph_from_data_frame(net_all$MEs, directed=TRUE, vertices=node)
+
+net <- graph_from_adjacency_matrix(A_all)
+net <- simplify(net, remove.multiple = F, remove.loops = T)
+V(net)$size <- 8
+V(net)$frame.color <- "white"
+V(net)$color <- "orange"
+V(net)$label <- "" 
+E(net)$arrow.mode <- 0
+plot(net)
+
+layouts <- grep("^layout_", ls("package:igraph"), value=TRUE)[-1]
+# Remove layouts that do not apply to our graph.
+layouts <- layouts[!grepl("bipartite|merge|norm|sugiyama|tree", layouts)]
+par(mfrow=c(3,3), mar=c(1,1,1,1))
+for (layout in layouts) {
+print(layout)
+l <- do.call(layout, list(net))
+plot(net, edge.arrow.mode=0, layout=l, main=layout) }
+# Choose final layout
+par(mfrow=c(1,1))
+plot(net, edge.arrow.mode=0, layout=layout_with_mds)
+
+dev.off()
+
+#barplot(nodes$Freq, col = rownames(ME.dissimilarity), ylim = c(0,5000))
+```

@@ -331,21 +331,43 @@ ddstrt <- ddstrt[!rownames(ddstrt) == "NULL", ]
 ddstrt <- estimateSizeFactors(ddstrt)
 normalized_counts <- counts(ddstrt, normalized=TRUE)
 
-restrt <- results(ddstrt, alpha = 0.01, contrast = c("trt", "yes", "no"))
+restrt <- results(ddstrt, alpha = 0.05, contrast = c("trt", "yes", "no"))
 restrt$transcript <- mcols(restrt)$transcript
 restrt$symbol <- mcols(restrt)$symbol
 
 # how many are "significant"?
-table(restrt[,"padj"] < 0.01)
+table(restrt[,"padj"] < 0.05)
 summary(restrt)
-SigGeneWrapper(restrt, 0.01, "trt")
+SigGeneWrapper(restrt, 0.05, "trt")
 
 restrt_lu <-restrt
+
+
+vsd <- varianceStabilizingTransformation(ddstrt, blind = FALSE)
+meanSdPlot(assay(vsd))
+
+
+pcaData <- plotPCA(vsd, intgroup = c("trt", "sex"), returnData = TRUE)
+# get percent variation
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+# pca code
+pca <- ggplot(pcaData, aes(x = PC1, y = PC2, color = trt, shape = sex, name=name)) +
+  stat_ellipse(aes(group = trt, linetype = trt), type = "t", level = 0.95, size = 1.25, show.legend = FALSE) +
+  #scale_linetype_manual(values=c("twodash", "longdash", "solid"), guide = FALSE) +
+  geom_point(size = 3, show.legend = TRUE) + 
+  #scale_color_manual(values = c("orange1", "red1", "yellow2", "chartreuse4")) +
+  #scale_shape_manual(values = c(8,9,15,16,10,17,18,11,13)) + 
+  xlab(paste0("PC1: ", percentVar[1], "% variance")) +
+  ylab(paste0("PC2: ", percentVar[2], "% variance")) +
+  coord_fixed() + theme_bw() +
+  guides(shape = guide_legend(order = 1),color = guide_legend(order = 2)) 
+ggplotly(pca)
 ```
 
 
 ```{r}
 restrt <- gene_ton_fun(restrt,0,ensembl)
+write.csv(restrt, file="results/GOresults/lu/lu_de_GO.csv")
 #gene_ton_fig(restrt,0,ensembl)
 
 anno_df <- data.frame(gene_id = restrt$ensembl, gene_name = restrt$hgnc_symbol)
@@ -369,14 +391,13 @@ de_symbols_IFNg_vs_naive <- deseqresult2df(restrt, FDR =0.05)$hgnc_symbol
                           ontology = "BP",
                           mapping = "org.Hs.eg.db",
                           geneID = "symbol",
-                          topTablerows = 500)
+                          topTablerows = 30)
 
 res_enrich <- shake_topGOtableResult(topgoDE_macrophage_IFNg_vs_naive)
 res_enrich_lu <- get_aggrscores(res_enrich = res_enrich,
                                         res_de = restrt,
                                         annotation_obj = anno_df,
                                         aggrfun = mean)
-
 
 #GeneTonic(dds = lu_dds_trt,
 #          res_de = restrt,
@@ -385,15 +406,21 @@ res_enrich_lu <- get_aggrscores(res_enrich = res_enrich,
 #          project_id = "myFirstGeneTonic")
 
 
-head(deseqresult2df(restrt))
-#one gene at a time
-#dds_macrophage <- estimateSizeFactors(lu_dds_trt)   
-gene_plot(lu_dds_trt,
-          gene = "ENSG00000117155",
+gene_list <- c("ENSG00000165272","ENSG00000004939","ENSG00000179639","ENSG00000121853","ENSG00000146678","ENSG00000125965","ENSG00000124440","ENSG00000130649")
+plist <- c()
+for (i in gene_list) {
+  
+plist[[i]] <- gene_plot(lu_dds_trt,
+          gene = c(i),
           intgroup = "trt",
           assay = "counts",
           annotation_obj = anno_df,
-          plot_type = "auto")
+          plot_type = "boxplot",
+          labels_display = F)
+
+}
+lu_DE_plots <- gridExtra::grid.arrange(grobs = plist, ncol=1)
+ggsave("figures/lu/lu_DE_plots.png", plot = lu_DE_plots, width = 8, height = 20)
 ```
 
 
