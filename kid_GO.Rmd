@@ -431,3 +431,38 @@ ggsave("figures/kid/kid_DE_plots.png", plot = kid_DE_plots, width = 8, height = 
 ```
 
 
+```{r}
+up_kid <- filter(as.data.frame(restrt), log2FoldChange > 0, padj < 0.05)
+gostres_kid_up <- gost(query = up_kid$hgnc_symbol, 
+                organism = "hsapiens", ordered_query = FALSE, 
+                multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
+                measure_underrepresentation = FALSE, evcodes = FALSE, 
+                user_threshold = 0.05, correction_method = "g_SCS", 
+                domain_scope = "annotated", custom_bg = NULL, 
+                numeric_ns = "", sources = NULL, as_short_link = FALSE, highlight = TRUE)
+
+go_kid_up <- as.data.frame(cbind(gostres_kid_up$result$term_id,gostres_kid_up$result$term_name, gostres_kid_up$result$term_size, gostres_kid_up$result$p_value))
+go_kid_up$tissue <- "kid"
+go_kid_up$DE <- "up"
+go_kid_up <- dplyr::filter(go_kid_up, grepl('GO', V1))
+go_kid_up <- top_n(go_kid_up, 20, V4)
+
+down_kid <- filter(as.data.frame(restrt), log2FoldChange < 0, padj < 0.05)
+gostres_kid_down <- gost(query = down_kid$hgnc_symbol, 
+                organism = "hsapiens", ordered_query = FALSE, 
+                multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
+                measure_underrepresentation = FALSE, evcodes = FALSE, 
+                user_threshold = 0.05, correction_method = "g_SCS", 
+                domain_scope = "annotated", custom_bg = NULL, 
+                numeric_ns = "", sources = NULL, as_short_link = FALSE, highlight = TRUE)
+
+go_kid_down <- as.data.frame(cbind(gostres_kid_down$result$term_id,gostres_kid_down$result$term_name, gostres_kid_down$result$term_size, gostres_kid_down$result$p_value))
+go_kid_down$tissue <- "kid"
+go_kid_down$DE <- "down"
+go_kid_down <- dplyr::filter(go_kid_down, grepl('GO', V1))
+go_kid_down <- top_n(go_kid_down, 20, V4)
+
+go_kid <- list(go_kid_down,go_kid_up)
+go_kid <- go_kid %>% reduce(full_join, by=c("V1","V2"))
+```
+

@@ -423,4 +423,37 @@ lu_DE_plots <- gridExtra::grid.arrange(grobs = plist, ncol=1)
 ggsave("figures/lu/lu_DE_plots.png", plot = lu_DE_plots, width = 8, height = 20)
 ```
 
+```{r}
+up_lu <- filter(as.data.frame(restrt), log2FoldChange > 0, padj < 0.05)
+gostres_lu_up <- gost(query = up_lu$hgnc_symbol, 
+                organism = "hsapiens", ordered_query = FALSE, 
+                multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
+                measure_underrepresentation = FALSE, evcodes = FALSE, 
+                user_threshold = 0.05, correction_method = "g_SCS", 
+                domain_scope = "annotated", custom_bg = NULL, 
+                numeric_ns = "", sources = NULL, as_short_link = FALSE, highlight = TRUE)
 
+go_lu_up <- as.data.frame(cbind(gostres_lu_up$result$term_id,gostres_lu_up$result$term_name, gostres_lu_up$result$term_size, gostres_lu_up$result$p_value))
+go_lu_up$tissue <- "lu"
+go_lu_up$DE <- "up"
+go_lu_up <- dplyr::filter(go_lu_up, grepl('GO', V1))
+go_lu_up <- top_n(go_lu_up, 20, V4)
+
+down_lu <- filter(as.data.frame(restrt), log2FoldChange < 0, padj < 0.05)
+gostres_lu_down <- gost(query = down_lu$hgnc_symbol, 
+                organism = "hsapiens", ordered_query = FALSE, 
+                multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
+                measure_underrepresentation = FALSE, evcodes = FALSE, 
+                user_threshold = 0.05, correction_method = "g_SCS", 
+                domain_scope = "annotated", custom_bg = NULL, 
+                numeric_ns = "", sources = NULL, as_short_link = FALSE, highlight = TRUE)
+
+go_lu_down <- as.data.frame(cbind(gostres_lu_down$result$term_id,gostres_lu_down$result$term_name, gostres_lu_down$result$term_size, gostres_lu_down$result$p_value))
+go_lu_down$tissue <- "lu"
+go_lu_down$DE <- "down"
+go_lu_down <- dplyr::filter(go_lu_down, grepl('GO', V1))
+go_lu_down <- top_n(go_lu_down, 20, V4)
+
+go_lu <- list(go_lu_down,go_lu_up)
+go_lu <- go_lu %>% reduce(full_join, by=c("V1","V2"))
+```

@@ -438,4 +438,39 @@ ggplot(df,aes(x=trt,y=log10(exp_value), color = trt))+
 ggsave("figures/gi/gi_DE_plots.png", plot = gi_DE_plots, width = 8, height = 20)
 ```
 
+```{r}
+up_gi <- filter(as.data.frame(restrt), log2FoldChange > 0, padj < 0.05)
+gostres_gi_up <- gost(query = up_gi$hgnc_symbol, 
+                organism = "hsapiens", ordered_query = FALSE, 
+                multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
+                measure_underrepresentation = FALSE, evcodes = FALSE, 
+                user_threshold = 0.05, correction_method = "g_SCS", 
+                domain_scope = "annotated", custom_bg = NULL, 
+                numeric_ns = "", sources = NULL, as_short_link = FALSE, highlight = TRUE)
+
+go_gi_up <- as.data.frame(cbind(gostres_gi_up$result$term_id,gostres_gi_up$result$term_name, gostres_gi_up$result$term_size, gostres_gi_up$result$p_value))
+go_gi_up$tissue <- "gi"
+go_gi_up$DE <- "up"
+go_gi_up <- dplyr::filter(go_gi_up, grepl('GO', V1))
+go_gi_up <- top_n(go_gi_up, 20, V4)
+
+down_gi <- filter(as.data.frame(restrt), log2FoldChange < 0, padj < 0.05)
+gostres_gi_down <- gost(query = down_gi$hgnc_symbol, 
+                organism = "hsapiens", ordered_query = FALSE, 
+                multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
+                measure_underrepresentation = FALSE, evcodes = FALSE, 
+                user_threshold = 0.05, correction_method = "g_SCS", 
+                domain_scope = "annotated", custom_bg = NULL, 
+                numeric_ns = "", sources = NULL, as_short_link = FALSE, highlight = TRUE)
+
+go_gi_down <- as.data.frame(cbind(gostres_gi_down$result$term_id,gostres_gi_down$result$term_name, gostres_gi_down$result$term_size, gostres_gi_down$result$p_value))
+go_gi_down$tissue <- "gi"
+go_gi_down$DE <- "down"
+go_gi_down <- dplyr::filter(go_gi_down, grepl('GO', V1))
+go_gi_down <- top_n(go_gi_down, 20, V4)
+
+go_gi <- list(go_gi_down,go_gi_up)
+go_gi <- go_gi %>% reduce(full_join, by=c("V1","V2"))
+```
+
 

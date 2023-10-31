@@ -423,4 +423,37 @@ liv_DE_plots <- gridExtra::grid.arrange(grobs = plist, ncol=1)
 ggsave("figures/liv/liv_DE_plots.png", plot = liv_DE_plots, width = 8, height = 20)
 ```
 
+```{r}
+up_liv <- filter(as.data.frame(restrt), log2FoldChange > 0, padj < 0.05)
+gostres_liv_up <- gost(query = up_liv$hgnc_symbol, 
+                organism = "hsapiens", ordered_query = FALSE, 
+                multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
+                measure_underrepresentation = FALSE, evcodes = FALSE, 
+                user_threshold = 0.05, correction_method = "g_SCS", 
+                domain_scope = "annotated", custom_bg = NULL, 
+                numeric_ns = "", sources = NULL, as_short_link = FALSE, highlight = TRUE)
 
+go_liv_up <- as.data.frame(cbind(gostres_liv_up$result$term_id,gostres_liv_up$result$term_name, gostres_liv_up$result$term_size, gostres_liv_up$result$p_value))
+go_liv_up$tissue <- "liv"
+go_liv_up$DE <- "up"
+go_liv_up <- dplyr::filter(go_liv_up, grepl('GO', V1))
+go_liv_up <- top_n(go_liv_up, 20, V4)
+
+down_liv <- filter(as.data.frame(restrt), log2FoldChange < 0, padj < 0.05)
+gostres_liv_down <- gost(query = down_liv$hgnc_symbol, 
+                organism = "hsapiens", ordered_query = FALSE, 
+                multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
+                measure_underrepresentation = FALSE, evcodes = FALSE, 
+                user_threshold = 0.05, correction_method = "g_SCS", 
+                domain_scope = "annotated", custom_bg = NULL, 
+                numeric_ns = "", sources = NULL, as_short_link = FALSE, highlight = TRUE)
+
+go_liv_down <- as.data.frame(cbind(gostres_liv_down$result$term_id,gostres_liv_down$result$term_name, gostres_liv_down$result$term_size, gostres_liv_down$result$p_value))
+go_liv_down$tissue <- "liv"
+go_liv_down$DE <- "down"
+go_liv_down <- dplyr::filter(go_liv_down, grepl('GO', V1))
+go_liv_down <- top_n(go_liv_down, 20, V4)
+
+go_liv <- list(go_liv_down,go_liv_up)
+go_liv <- go_liv %>% reduce(full_join, by=c("V1","V2"))
+```

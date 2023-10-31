@@ -607,6 +607,81 @@ cca_plot
 ```
 
 
+```{r}
+go_kid <- go_kid %>% rename(GO = V1,description = V2,kid_up = V3.x,kid_down=V3.y)
+go_kid <- go_kid %>% rename(kid_up_pval = V4.x, kid_down_pval = V4.y)
+go_kid <-select(go_kid, -tissue.x)
+go_kid <-select(go_kid, -tissue.y)
+go_kid <-select(go_kid, -DE.x)
+go_kid <-select(go_kid, -DE.y)
+
+go_gi <- go_gi %>% rename(GO = V1,description = V2,gi_up = V3.x,gi_down=V3.y)
+go_gi <- go_gi %>% rename(gi_up_pval = V4.x, gi_down_pval = V4.y)
+go_gi <-select(go_gi, -tissue.x)
+go_gi <-select(go_gi, -tissue.y)
+go_gi <-select(go_gi, -DE.x)
+go_gi <-select(go_gi, -DE.y)
+
+go_hyp <- go_hyp %>% rename(GO = V1,description = V2,hyp_up = V3.x,hyp_down=V3.y)
+go_hyp <- go_hyp %>% rename(hyp_up_pval = V4.x, hyp_down_pval = V4.y)
+go_hyp <-select(go_hyp, -tissue.x)
+go_hyp <-select(go_hyp, -tissue.y)
+go_hyp <-select(go_hyp, -DE.x)
+go_hyp <-select(go_hyp, -DE.y)
+
+go_liv <- go_liv %>% rename(GO = V1,description = V2,liv_up = V3.x,liv_down=V3.y)
+go_liv <- go_liv %>% rename(liv_up_pval = V4.x, liv_down_pval = V4.y)
+go_liv <-select(go_liv, -tissue.x)
+go_liv <-select(go_liv, -tissue.y)
+go_liv <-select(go_liv, -DE.x)
+go_liv <-select(go_liv, -DE.y)
+
+go_lu <- go_lu %>% rename(GO = V1,description = V2,lu_up = V3.x,lu_down=V3.y)
+go_lu <- go_lu %>% rename(lu_up_pval = V4.x, lu_down_pval = V4.y)
+go_lu <-select(go_lu, -tissue.x)
+go_lu <-select(go_lu, -tissue.y)
+go_lu <-select(go_lu, -DE.x)
+go_lu <-select(go_lu, -DE.y)
+
+
+go_list <- list(go_kid,go_gi,go_hyp,go_liv,go_lu)
+go <- go_list %>% reduce(full_join, by=c("GO","description"))
+go <- reshape2::melt(go,measure.vars = c("kid_up", "kid_down","gi_up","gi_down","hyp_up","hyp_down","liv_up", "liv_down", "lu_up", "lu_down"))
+go <- go %>% rename(count = value, tissue = variable)
+go <- reshape2::melt(go,measure.vars = c("kid_up_pval","kid_down_pval","gi_up_pval","gi_down_pval","hyp_up_pval","hyp_down_pval","liv_up_pval","liv_down_pval","lu_up_pval","lu_down_pval"))
+go <- go %>% rename(pval = value)
+go<- within(go, tissue<-data.frame(do.call('rbind', strsplit(as.character(tissue), '_', fixed=TRUE))))
+go$pval <- as.numeric(go$pval)
+#go$pval <- round(go$pval ,digit=5)
+go$count <- as.numeric(go$count)
+#go <- na.omit(go)
+up_go <- na.omit(filter(go, tissue$X2=="up"))
+down_go <- na.omit(filter(go, tissue$X2=="down"))
+
+theme<-theme(panel.background = element_blank(),panel.border=element_blank(),axis.line = element_line(colour = "black"),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),
+             strip.background=element_blank(),axis.text.x=element_text(colour="black",size=16),axis.text.y=element_text(colour="black",size=8),
+             axis.ticks=element_line(colour="black"),plot.margin=unit(c(1,1,1,1),"line"))
+
+up <-ggplot(up_go, aes(x = tissue$X1, y = description, color = tissue$X1, size = count)) +
+  geom_point()+
+  theme+
+  ggtitle("up regulated")+
+  theme(legend.position = "none")
+
+down <- ggplot(down_go, aes(x = tissue$X1, y = description, color = tissue$X1, size = count)) +
+  geom_point()+
+  theme+
+  ggtitle("down regulated")+
+  theme(legend.position = "none")
+
+up|down
+```
+
+
+
+
+
+
 
 ```{r}
 rownames(out)
@@ -794,8 +869,6 @@ legend("topright", legend = setLabels, col = colors, pch = 20) ;
 ```{r}
 net = blockwiseConsensusModules(multiExpr, power = 14, minModuleSize = 30, deepSplit = 2,pamRespectsDendro = FALSE,mergeCutHeight = 0.25, numericLabels = F,minKMEtoStay = 0,saveTOMs = TRUE, verbose = 5, maxBlockSize=14000,)
 ```
-
-
 
 
 ```{r}

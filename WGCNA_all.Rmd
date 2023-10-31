@@ -343,7 +343,68 @@ ggplot(data = grey , aes(x = labels, y = variable)) +
     axis.title.y = element_text(size=16)) +
   #geom_text_repel(aes(label = gene), hjust=0, vjust=0,size=3,parse=TRUE)+
   theme 
+
+
 ```
+
+```{r}
+test <- c("AGT", "CYP2E1", "CYP4B1", "INMT","MTARC1", "PCK1", "SLC27A2", 
+          "SLC38A4")
+
+datalist = list()
+
+for (i in test) {
+test.kid <- plotCounts(kid_dds_trt, gene = i, intgroup = c("trt", "sex"), returnData = TRUE, xlab="trt")
+test.kid$gene <- i
+test.kid$tissue <- "kid"
+
+test.liv <- plotCounts(liv_dds_trt, gene = i, intgroup = c("trt", "sex"), returnData = TRUE, xlab="trt")
+test.liv$gene <- i
+test.liv$tissue <- "liv"
+
+test.lu <- plotCounts(lu_dds_trt, gene = i, intgroup = c("trt", "sex"), returnData = TRUE, xlab="trt")
+test.lu$gene <- i
+test.lu$tissue <- "lu"
+
+test.gi <- plotCounts(gi_dds_trt, gene = i, intgroup = c("trt", "sex"), returnData = TRUE, xlab="trt")
+test.gi$gene <- i
+test.gi$tissue <- "gi"
+
+test.hyp <- plotCounts(hyp_dds_trt, gene = i, intgroup = c("trt", "sex"), returnData = TRUE, xlab="trt")
+test.hyp$gene <- i
+test.hyp$tissue <- "hyp"
+
+datalist[[i]] <- rbind(test.kid, test.liv, test.lu, test.gi, test.hyp)
+
+}
+
+
+big_data = do.call(rbind, datalist)
+
+big_data$trt <- as.factor(big_data$trt)
+big_data$sex <- as.factor(big_data$sex)
+big_data$gene <- as.factor(big_data$gene)
+big_data$tissue <- as.factor(big_data$tissue)
+
+ggplot(big_data,  aes(x = trt, y = count)) + 
+      #ggtitle(title)  + 
+      theme +
+      ylab("Normalized Counts") + 
+      xlab("Tissue") +
+      geom_boxplot(outlier.shape = NA, lwd=.75, aes(fill = trt)) + 
+      geom_point(aes(color = trt), position = position_jitterdodge()) +
+      facet_grid(gene ~ tissue, scales = "free_y") +
+      #scale_fill_manual(values = c("orange1", "red1", "yellow2", "chartreuse4")) +
+      #scale_color_manual(values = c("orange1", "red1", "yellow2", "chartreuse4")) +
+      theme_classic() +
+  #theme(axis.text=element_text(size=18),axis.title=element_text(size=18,face="bold"), plot.title = element_text(size = 18, hjust = 0.5), strip.text.y = element_text(size = 18), strip.text.x = element_text(size = 18),
+theme(panel.border = element_rect(color = "black", fill = NA, size = 1),  legend.title=element_text(size=18), legend.text=element_text(size=18))
+
+#, legend.position = "none")
+
+```
+
+
 
 ```{r}
 traitData$tissue <- as.factor(traitData$tissue )

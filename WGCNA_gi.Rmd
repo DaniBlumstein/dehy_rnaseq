@@ -306,6 +306,53 @@ geneInfo0_gi$ensembl <- rownames(geneInfo0_gi)
 write.csv(geneInfo0_gi, file="results/WGCNAresults/ALLSAMPLES_gi_wgcna_gene_module_membership_pearson_signed.csv")
 ```
 
+```{r}
+modTraitP_gi_long <- reshape2::melt(modTraitP_gi,measure.vars = c("sex","total_weight_delta","pro_weight","Na","BUN","AnGap","K","Crea","Hct","Cl","Glu","Hb.","TCO2","iCa","trt ",'mean_RQ','mean_EE','mean_H2Og','body_temp_3'))
+
+modTraitP_gi_long_sig <- filter(modTraitP_gi_long, value<0.05)
+for ( col in 1:ncol(modTraitP_gi_long_sig)){
+    modTraitP_gi_long_sig$Var1 <-  sub("ME*", "", modTraitP_gi_long_sig$Var1)
+}
+
+modTraitP_gi_wide_sig <- modTraitP_gi_long_sig %>% pivot_wider(names_from = Var2, values_from = value)
+
+genes_mods <- as.data.frame(cbind(rownames(geneInfo0_gi),geneInfo0_gi$moduleColor))
+genes_mods_filtered <- filter(genes_mods,
+                       V2 %in% modTraitP_gi_wide_sig$Var1)
+
+genes_mods_filtered <- genes_mods_filtered %>% rename(gene = V1,color = V2)
+modTraitP_gi_long_sig <- modTraitP_gi_long_sig %>% rename(color = Var1,pheno = Var2,pval = value)
+
+combo <- list(genes_mods_filtered,modTraitP_gi_long_sig)
+combo <- combo %>% reduce(full_join, by="color")
+
+looping <- unique(combo$color)
+gi_list<-list()
+for (i in looping) {
+subset <- filter(combo, color==i)
+gostres_i <- gost(query = subset$gene, 
+                organism = "hsapiens", ordered_query = FALSE, 
+                multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
+                measure_underrepresentation = FALSE, evcodes = FALSE, 
+                user_threshold = 0.05, correction_method = "g_SCS", 
+                domain_scope = "annotated", custom_bg = NULL, 
+                numeric_ns = "", sources = NULL, as_short_link = FALSE, highlight = TRUE)
+
+go_i <- as.data.frame(cbind(gostres_i$result$term_id,gostres_i$result$term_name, gostres_i$result$term_size, gostres_i$result$p_value))
+go_i$color <- i
+go_i$tissue <- "gi"
+go_i <- dplyr::filter(go_i, grepl('GO', V1))
+go_i <- top_n(go_i, 20, V4)
+go_i$phenos <- list(unique(subset$pheno))
+gi_list[[i]]<-go_i
+}
+
+go_wgcna_gi <- gi_list %>% reduce(full_join, by=c("V1","V2"))
+```
+
+
+
+
 
 GO
 ```{r}
@@ -326,7 +373,7 @@ wgcna <- geneInfo0_gi$ensembl[which(geneInfo0_gi$moduleColor==color)]
 gi_dds_trt1 <- subset(gi_dds_trt, rownames(gi_dds_trt) %in% wgcna)
 
 
-restrt <- results(gi_dds_trt1, alpha = 0.01, contrast = c("trt", "yes", "no"))
+restrt <- results(gi_dds_trt1, alpha = 0.05, contrast = c("trt", "yes", "no"))
 restrt$transcript <- mcols(restrt)$transcript
 restrt$symbol <- mcols(restrt)$symbol
 
