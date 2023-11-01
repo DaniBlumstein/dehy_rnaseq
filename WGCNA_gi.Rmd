@@ -328,102 +328,28 @@ combo <- combo %>% reduce(full_join, by="color")
 
 looping <- unique(combo$color)
 gi_list<-list()
+
 for (i in looping) {
 subset <- filter(combo, color==i)
-gostres_i <- gost(query = subset$gene, 
+phenos <- c(unique(as.character(subset$pheno)))
+  for (p in phenos) 
+  {
+    subset2 <- filter(subset, pheno==p)
+    gostres_i <- gost(query = subset2$gene, 
                 organism = "hsapiens", ordered_query = FALSE, 
                 multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
                 measure_underrepresentation = FALSE, evcodes = FALSE, 
                 user_threshold = 0.05, correction_method = "g_SCS", 
                 domain_scope = "annotated", custom_bg = NULL, 
                 numeric_ns = "", sources = NULL, as_short_link = FALSE, highlight = TRUE)
-
-go_i <- as.data.frame(cbind(gostres_i$result$term_id,gostres_i$result$term_name, gostres_i$result$term_size, gostres_i$result$p_value))
-go_i$color <- i
-go_i$tissue <- "gi"
-go_i <- dplyr::filter(go_i, grepl('GO', V1))
-go_i <- top_n(go_i, 20, V4)
-go_i$phenos <- list(unique(subset$pheno))
+    go_i <- as.data.frame(cbind(gostres_i$result$term_id,gostres_i$result$term_name, gostres_i$result$term_size,gostres_i$result$p_value))
+    go_i <- top_n(go_i, 20, V4)
+    go_i <- go_i %>% rename(!! paste0(p):=V3)
+  }
+go_i <-select(go_i, -V4)
 gi_list[[i]]<-go_i
 }
 
 go_wgcna_gi <- gi_list %>% reduce(full_join, by=c("V1","V2"))
 ```
 
-
-
-
-
-GO
-```{r}
-mods <- unique(geneInfo0_gi$moduleColor)
-#removing colors getting stuck on FDR = 0.05
-mods <- mods[- 3] 
-mods <- mods[- 7]
-mods <- mods[- 7]
-mods <- mods[- 7]
-mods <- mods[- 7]
-mods <- mods[- 10]
-mods <- mods[- 10]
-mods <- mods[- 14]
-
-for (color in mods) 
-  {
-wgcna <- geneInfo0_gi$ensembl[which(geneInfo0_gi$moduleColor==color)]
-gi_dds_trt1 <- subset(gi_dds_trt, rownames(gi_dds_trt) %in% wgcna)
-
-
-restrt <- results(gi_dds_trt1, alpha = 0.05, contrast = c("trt", "yes", "no"))
-restrt$transcript <- mcols(restrt)$transcript
-restrt$symbol <- mcols(restrt)$symbol
-
-restrt$ensembl <- sapply( strsplit( rownames(restrt), split="\\+" ), "[", 1 )
-#ensembl = useMart( "ensembl", dataset = "hsapiens_gene_ensembl" )
-
-#querying with the ENSEMBL gene id and requesting the Entrez gene id and HGNC gene symbol.
-genemap <- getBM( attributes = c("ensembl_gene_id", "hgnc_symbol"),
-                  filters = "ensembl_gene_id",
-                  values = rownames(restrt),
-                  mart = ensembl)
-
-idx <- match(rownames(restrt), genemap$ensembl_gene_id )
-restrt$hgnc_symbol <- genemap$hgnc_symbol[ idx ]
-hgnc_symbol <- restrt$hgnc_symbol
-
-mcols(gi_dds_trt1) <- cbind(mcols(gi_dds_trt1), hgnc_symbol)
-restrt$hgnc_symbol <- rowData(gi_dds_trt1)$hgnc_symbol
-
-gi_dds_trt1 <- estimateSizeFactors(gi_dds_trt1)
-
-anno_df <- data.frame(gene_id = restrt$ensembl, gene_name = restrt$hgnc_symbol)
-vst_macrophage <- varianceStabilizingTransformation(gi_dds_trt1)
-
-bg_ids <- rownames(gi_dds_trt1)[rowSums(counts(gi_dds_trt1)) > 0]
-bg_symbols <- mapIds(org.Hs.eg.db,
-                     keys = bg_ids,
-                     column = "SYMBOL",
-                     keytype = "ENSEMBL",
-                     multiVals = "first")
- 
-# res_enrich object
-#library("AnnotationDbi")
-de_symbols_IFNg_vs_naive <- deseqresult2df(restrt, FDR =0.05)$hgnc_symbol
-
-# res_enrich object ------------------------------------------------------------
- topgoDE <-
-  pcaExplorer::topGOtable(de_symbols_IFNg_vs_naive,
-                          bg_symbols,
-                          ontology = "BP",
-                          mapping = "org.Hs.eg.db",
-                          geneID = "symbol",
-                          topTablerows = 30)
-
-res_enrich <- shake_topGOtableResult(topgoDE)
-res_enrich_mod <- get_aggrscores(res_enrich = res_enrich,
-                                        res_de = restrt,
-                                        annotation_obj = anno_df,
-                                        aggrfun = mean)
-res_enrich_mod$mod <- color
-write.csv(res_enrich_mod, file=paste0("results/WGCNAresults/gi/gi_wgcna_GO",color,".csv"))
-}
-```

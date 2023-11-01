@@ -472,14 +472,6 @@ normalized_counts <- vst(ddstrt, blind = FALSE)
 all_Expr <- assay(normalized_counts)
 #all_Expr<- as.data.frame(all_Expr)
 #all_Expr <- tibble::rownames_to_column(all_Expr, "ID")
-
-library(caroline)
-write.delim(all_Expr, "data/normalized.count.data.txt", sep = '\t')
-
-
-all_Expr<- as.matrix(all_Expr)
-heatmap(all_Expr,
-        Rowv=NA, Colv=NA, col=rev(brewer.pal(9,"RdBu")))
 ```
 
 ```{r}
@@ -654,7 +646,7 @@ go<- within(go, tissue<-data.frame(do.call('rbind', strsplit(as.character(tissue
 go$pval <- as.numeric(go$pval)
 #go$pval <- round(go$pval ,digit=5)
 go$count <- as.numeric(go$count)
-#go <- na.omit(go)
+go_clean <- na.omit(go)
 up_go <- na.omit(filter(go, tissue$X2=="up"))
 down_go <- na.omit(filter(go, tissue$X2=="down"))
 
@@ -679,8 +671,76 @@ up|down
 
 
 
+```{r}
+go_wgcna_lu <- dplyr::filter(go_wgcna_lu, grepl('GO', V1))
+go_wgcna_lu <- go_wgcna_lu %>% rename(GO = V1,description = V2,lu_trt = trt,lu_body.temp.1=body_temp_3.x, lu_body.temp.2=body_temp_3.y, lu_wlr.1=mean_H2Og.x,lu_body.temp.3=body_temp_3.x.x,lu_body.temp.4= body_temp_3.y.y,lu_TCO2=TCO2,lu_wlr.2=mean_H2Og.y,lu_iCa = iCa, lu_body.temp.5=body_temp_3,lu_EE=mean_EE)
+
+go_wgcna_liv <- dplyr::filter(go_wgcna_liv, grepl('GO', V1))
+go_wgcna_liv <- go_wgcna_liv %>% rename(GO = V1,description = V2, liv_body.temp.1=body_temp_3.x, liv_body.temp.2=body_temp_3.y,liv_body.temp.3=body_temp_3.x.x,liv_body.temp.4=body_temp_3.y.y,liv_TCO2.1=TCO2.x,liv_iCa=iCa,liv_body.temp.5=body_temp_3.x.x.x,liv_body.temp.6=body_temp_3.y.y.y,liv_EE.1=mean_EE.x,liv_body.temp.7=body_temp_3.x.x.x.x,liv_wlr.1=mean_H2Og.x,liv_trt=trt,liv_body.temp.8=body_temp_3.y.y.y.y,liv_TCO2.2=TCO2, liv_EE.2=mean_EE.y,liv_wlr.2=mean_H2Og.y,liv_TCO2.3= TCO2.y)
+
+go_wgcna_gi <- dplyr::filter(go_wgcna_gi, grepl('GO', V1))
+go_wgcna_gi <- go_wgcna_gi %>% rename(GO = V1,description = V2,gi_Cl=Cl,gi_trt.1 = trt.x,gi_Crea=Crea,gi_Hb.1=Hb..x,gi_trt.2=trt.y,gi_body.temp.1=body_temp_3.x,gi_trt.3=trt.x.x,gi_wlr.1=mean_H2Og.x,gi_trt.4=trt.y.y,gi_Hb.2=Hb..y,gi_wlr.2=mean_H2Og.y,gi_wlr.3=mean_H2Og,gi_body.temp.2=body_temp_3.y,gi_Hb.3=Hb.,gi_trt.5=trt,gi_body.temp.3=body_temp_3)
+
+go_wgcna_hyp <- dplyr::filter(go_wgcna_hyp, grepl('GO', V1))
+go_wgcna_hyp <- go_wgcna_hyp %>% rename(GO = V1,description = V2,hyp_Crea.1=Crea.x,hyp_TCO2=TCO2,hyp_trt = trt,hyp_body.temp=body_temp_3,hyp_Crea.2=Crea.y,hyp_EE =mean_EE)
+
+go_wgcna_kid <- dplyr::filter(go_wgcna_kid, grepl('GO', V1))
+go_wgcna_kid <- go_wgcna_kid %>% rename(GO = V1,description = V2,kid_trt.1 =trt.x,kid_wlr.1 =mean_H2Og.x,kid_trt.2 =trt.y,kid_Cl.1 =Cl.x,kid_body.temp.1 =body_temp_3.x,kid_wlr.2 =mean_H2Og.y ,kid_K.1 =K.x,kid_Hb =Hb.,kid_wlr.3 =mean_H2Og.x.x,kid_wlr.4 =mean_H2Og.y.y,kid_wlr.5 =mean_H2Og,kid_Glu.1 =Glu.x,kid_body.temp.2 =body_temp_3.y,kid_body.temp.3 =body_temp_3,kid_Cl.2 =Cl.y,kid_TCO2 =TCO2,kid_RQ =mean_RQ,kid_Glu.2 =Glu.y,kid_K.2 =K.y)
+
+go_wgcna_list <- list(go_wgcna_lu,go_wgcna_liv,go_wgcna_gi,go_wgcna_hyp,go_wgcna_kid)
+go_wgcna <- go_wgcna_list %>% reduce(full_join, by=c("GO","description"))
+
+rotate <- colnames(go_wgcna)
+rotate <- rotate[-1]
+rotate <- rotate[-1]
+go_wgcna <- reshape2::melt(go_wgcna,measure.vars = rotate)
+unique(go_wgcna$variable)
+go_wgcna<- within(go_wgcna, variable<-data.frame(do.call('rbind', strsplit(as.character(variable), '_', fixed=TRUE))))
+go_wgcna <- go_wgcna %>% rename(count = value)
+go_wgcna$count <- as.numeric(go_wgcna$count)
+
+go_wgcna_clean <- na.omit(go_wgcna)
+go_wgcna_clean_hyp <- filter(go_wgcna_clean, variable$X1=="hyp")
+go_wgcna_clean_liv <- filter(go_wgcna_clean, variable$X1=="liv")
+go_wgcna_clean_lu <- filter(go_wgcna_clean, variable$X1=="lu")
+go_wgcna_clean_gi <- filter(go_wgcna_clean, variable$X1=="gi")
+go_wgcna_clean_kid <- filter(go_wgcna_clean, variable$X1=="kid")
 
 
+hyp <- ggplot(go_wgcna_clean_hyp, aes(x = variable$X2, y = description, color = variable$X2, size = count)) +
+  geom_point()+
+  theme+
+  ggtitle("wgcna go")+
+  theme(legend.position = "none")
+
+liv <- ggplot(go_wgcna_clean_liv, aes(x = variable$X2, y = description, color = variable$X2, size = count)) +
+  geom_point()+
+  theme+
+  ggtitle("wgcna go")+
+  theme(legend.position = "none")
+
+lu <- ggplot(go_wgcna_clean_lu, aes(x = variable$X2, y = description, color = variable$X2, size = count)) +
+  geom_point()+
+  theme+
+  ggtitle("wgcna go")+
+  theme(legend.position = "none")
+
+gi <- ggplot(go_wgcna_clean_gi, aes(x = variable$X2, y = description, color = variable$X2, size = count)) +
+  geom_point()+
+  theme+
+  ggtitle("wgcna go")+
+  theme(legend.position = "none")
+
+kid <- ggplot(go_wgcna_clean_kid, aes(x = variable$X2, y = description, color = variable$X2, size = count)) +
+  geom_point()+
+  theme+
+  ggtitle("wgcna go")+
+  theme(legend.position = "none")
+
+kid/liv|gi/hyp/lu
+
+go_wgcna_clean_lu
+```
 
 
 ```{r}
@@ -700,9 +760,139 @@ gostplot(gostres, capped = TRUE, interactive = TRUE)
 
 ```
 
+Now I will run these test for each tissue independently. 
+in a new script, one per tissue cause life
 
-## now you have normalized read counts - yay!
 ```{r}
+#restrt_lu
+#restrt_liv
+#restrt_gi
+#restrt_hyp
+#restrt_kid
+library(RColorBrewer)
+
+kid_lfc <- as.data.frame(cbind(rownames(restrt_kid),restrt_kid$padj, restrt_kid$log2FoldChange))
+kid_lfc <- kid_lfc %>% rename(ensembl = V1,padj_kid = V2,log2FoldChange_kid = V3)
+kid_lfc$ensembl <- as.factor(kid_lfc$ensembl)
+
+hyp_lfc <- as.data.frame(cbind(rownames(restrt_hyp),restrt_hyp$padj, restrt_hyp$log2FoldChange))
+hyp_lfc <- hyp_lfc %>% rename(ensembl = V1,padj_hyp = V2,log2FoldChange_hyp = V3)
+hyp_lfc$ensembl <- as.factor(hyp_lfc$ensembl)
+
+gi_lfc <- as.data.frame(cbind(rownames(restrt_gi),restrt_gi$padj, restrt_gi$log2FoldChange))
+gi_lfc <- gi_lfc %>% rename(ensembl = V1,padj_gi = V2,log2FoldChange_gi = V3)
+gi_lfc$ensembl <- as.factor(gi_lfc$ensembl)
+
+liv_lfc <- as.data.frame(cbind(rownames(restrt_liv),restrt_liv$padj, restrt_liv$log2FoldChange))
+liv_lfc <- liv_lfc %>% rename(ensembl = V1,padj_liv = V2,log2FoldChange_liv = V3)
+liv_lfc$ensembl <- as.factor(liv_lfc$ensembl)
+
+lu_lfc <- as.data.frame(cbind(rownames(restrt_lu),restrt_lu$padj, restrt_lu$log2FoldChange))
+lu_lfc <- lu_lfc %>% rename(ensembl = V1,padj_lu = V2,log2FoldChange_lu = V3)
+lu_lfc$ensembl <- as.factor(lu_lfc$ensembl)
+
+lfc_merge1 <- merge(kid_lfc, hyp_lfc, by = "ensembl",all.x = TRUE)
+lfc_merge2 <- merge(lfc_merge1,gi_lfc,by = "ensembl",all.x = TRUE)
+lfc_merge3 <- merge(lfc_merge2,liv_lfc,by = "ensembl",all.x = TRUE)
+lfc_merge4 <- merge(lfc_merge3,lu_lfc,by = "ensembl",all.x = TRUE)
+lfc_merge <- merge(lfc_merge4,annos,by = "ensembl",all.x = TRUE)
+lfc_merge$ensid <- NULL
+lfc_merge$ensembl <- NULL
+lfc_merge$transcript <- NULL
+lfc_merge$Gene <- NULL
+lfc_merge <- lfc_merge %>% distinct(gene, .keep_all = TRUE)
+rownames(lfc_merge) <- lfc_merge$gene
+lfc_merge$gene <- NULL
+
+
+data_FC <- as.data.frame(cbind(rownames(lfc_merge),lfc_merge$log2FoldChange_kid,lfc_merge$log2FoldChange_hyp, lfc_merge$log2FoldChange_gi, lfc_merge$log2FoldChange_liv, lfc_merge$log2FoldChange_lu))
+
+data_FC <- data_FC %>% rename(gene = V1,kid = V2,hyp = V3,gi=V4,liv=V5, lu=V6)
+data_file <- reshape2::melt(data_FC,measure.vars = c("kid", "hyp", "gi","liv","lu"))
+
+data_Pval<- as.data.frame(cbind(rownames(lfc_merge),lfc_merge$padj_kid,lfc_merge$padj_hyp, lfc_merge$padj_gi, lfc_merge$padj_liv, lfc_merge$padj_lu))
+
+data_Pval <- data_Pval %>% rename(gene = V1,kid = V2,hyp = V3,gi=V4,liv=V5, lu=V6)
+data_Pval <- reshape2::melt(data_Pval,measure.vars = c("kid", "hyp", "gi","liv","lu"))
+data_file$pval <- as.numeric(data_Pval$value)
+data_file$value <- as.numeric(data_file$value)
+
+data_file= data_file[!apply(data_file[,2:3] == 0, 1, FUN = any, na.rm = TRUE),]
+rownames(data_file) <- NULL
+
+data_file$labels=round(data_file$value,3)
+
+theme<-theme(panel.background = element_blank(),panel.border=element_blank(),axis.line = element_line(colour = "black"),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),
+             strip.background=element_blank(),axis.text.x=element_text(colour="black",size=16),axis.text.y=element_text(colour="black",size=16),
+             axis.ticks=element_line(colour="black"),plot.margin=unit(c(1,1,1,1),"line"))
+
+
+grey= unique(subset(data_file,data_file$pval>=0.05)[c("variable", "labels","gene")])
+color= unique(subset(data_file,data_file$pval<0.05)[c("variable", "labels","gene")])
+grey$direction[grey$labels<0]="down"
+grey$direction[grey$labels>=0]="up"
+
+color$direction[color$labels<0]="down"
+color$direction[color$labels>=0]="up"
+
+cbPalette = c("#BF4343", "#4E9571")
+
+ggplot(data = grey , aes(x = labels, y = variable)) +
+  geom_jitter(color = "darkgrey", size = 1.25,height = 0.3) +
+  geom_jitter(
+    data = color,
+    aes(x = labels, y = variable,color=direction), size = 1.3,height = 0.3) + scale_color_manual(values = cbPalette) +
+  scale_x_continuous(breaks = pretty(data_file$value, n = 10)) +  labs(title= "", x= "\nLog2FC", y= "") + 
+  coord_cartesian(xlim = c(-10, 10)) +
+  theme(
+    axis.title.x = element_text( size=16 ),
+    axis.title.y = element_text(size=16)) +
+  #geom_text_repel(aes(label = gene), hjust=0, vjust=0,size=3,parse=TRUE)+
+  theme 
+
+
+```
+
+```{r}
+test <- c("AGT", "CYP2E1", "CYP4B1", "INMT","MTARC1", "PCK1", "SLC27A2", 
+          "SLC38A4")
+
+datalist = list()
+
+
+for (i in test) 
+  {
+counts <- plotCounts(ddstrt, gene = i, intgroup = c("trt", "sex", "tissue"), returnData = TRUE, xlab="trt")
+counts$gene <- i
+datalist[[i]] <- rbind(counts)
+}
+
+big_data = do.call(rbind, datalist)
+
+big_data$trt <- as.factor(big_data$trt)
+big_data$sex <- as.factor(big_data$sex)
+big_data$gene <- as.factor(big_data$gene)
+big_data$tissue <- as.factor(big_data$tissue)
+big_data$count <- as.numeric(big_data$count)
+
+
+ggplot(big_data,  aes(x = trt, y = log(count), fill = tissue, alpha=trt)) + 
+      #ggtitle(title)  + 
+      theme +
+      ylab("log transofrmed Normalized Counts") + 
+      xlab("Tissue") +
+      geom_boxplot(outlier.shape = NA, lwd=.75) + 
+      geom_point(aes(color=tissue),position = position_jitterdodge()) +
+      facet_grid(gene~tissue , scales = "free") +
+      theme_classic() +
+      theme(panel.border = element_rect(color = "black", fill = NA, size = .5),  legend.title=element_text(size=18), legend.text=element_text(size=18),axis.text.x=element_text(colour="black",size=10),axis.text.y=element_text(colour="black",size=10))+
+  scale_fill_manual(values=natparks.pals("BryceCanyon",5))+
+  scale_color_manual(values=natparks.pals("BryceCanyon",5))
+
+
+```
+multi wgcna. didn't like it so didn't use it 
+
 for ( col in 1:ncol(kid_Expr)){
     colnames(kid_Expr)[col] <-  sub("X", "", colnames(kid_Expr)[col])
 }
@@ -749,9 +939,9 @@ names(multiExpr) = setLabels
 lapply(multiExpr, lapply, dim)
 
 exprSize = checkSets(multiExpr)
-```
 
-```{r}
+
+
 sampleTrees = list()
 for (set in 1:nSets)
 {
@@ -764,10 +954,10 @@ for (set in 1:nSets)
 {
 plot(sampleTrees[[set]], main = paste("Sample clustering on all genes in", setLabels[set]),xlab="", sub="", cex = 0.7)
 }
-```
 
 
-```{r}
+
+
 # Trait data generation ---------------------------------------------------
 # Now we read in the phenotypic trait data
 traitData <- as.data.frame(samples)
@@ -796,18 +986,16 @@ nGenes = exprSize$nGenes;
 nSamples = exprSize$nSamples;
 
 save(multiExpr, Traits, nGenes, nSamples, setLabels, exprSize,file = "Consensus-dataInput.RData")
-```
 
-```{r}
+
+
 lnames = load(file = "Consensus-dataInput.RData");
 
 # The variable lnames contains the names of loaded variables.
 lnames
 # Get the number of sets in the multiExpr structure.
 nSets = checkSets(multiExpr)$nSets
-```
 
-```{r}
 
 # Choose a set of soft-thresholding powers
 powers = c(seq(4,10,by=1), seq(12,20, by=2));
@@ -864,14 +1052,11 @@ legend("bottomright", legend = setLabels, col = colors, pch = 20) ;
 } else
 legend("topright", legend = setLabels, col = colors, pch = 20) ;
 }
-```
 
-```{r}
+
 net = blockwiseConsensusModules(multiExpr, power = 14, minModuleSize = 30, deepSplit = 2,pamRespectsDendro = FALSE,mergeCutHeight = 0.25, numericLabels = F,minKMEtoStay = 0,saveTOMs = TRUE, verbose = 5, maxBlockSize=14000,)
-```
 
 
-```{r}
 consMEs = net$multiMEs;
 moduleLabels = net$colors;
 # Convert the numeric labels to color labels
@@ -881,9 +1066,8 @@ consTree = net$dendrograms[[1]];
 sizeGrWindow(8,6);
 #pdf(file = "Plots/ConsensusDendrogram-auto.pdf", wi = 8, he = 6)
 plotDendroAndColors(consTree, moduleColors,"Module colors",dendroLabels = FALSE, hang = 0.03,addGuide = TRUE, guideHang = 0.05,main = "Consensus gene dendrogram and module colors")
-```
 
-```{r}
+
 MEColors = substring(names(consMEs[[1]]$data), 3);
 MEColorNames = paste("ME", MEColors, sep="");
 
@@ -897,8 +1081,6 @@ for (set in 1:nSets)
 moduleTraitCor[[set]] = cor(consMEs[[set]]$data, Traits[[set]], use = "p");
 moduleTraitPvalue[[set]] = corPvalueFisher(moduleTraitCor[[set]], exprSize$nSamples[set]);
 }
-
-
 
 # Initialize matrices to hold the consensus correlation and p-value
 consensusCor = matrix(NA, nrow(moduleTraitCor[[1]]), ncol(moduleTraitCor[[1]]));
@@ -935,14 +1117,10 @@ dim(textMatrix) = dim(moduleTraitCor[[set]])
 
 #pdf(file = "figures/ModuleTraitRelationships-consensus.pdf", wi = 10, he = 7);
 
-dev.off()
+
 par(mar = c(6, 8.8, 3, 2.2));
 labeledHeatmap(Matrix = consensusCor,xLabels = names(Traits[[set]]),yLabels = MEColorNames,ySymbols = MEColorNames,colorLabels = FALSE,colors = blueWhiteRed(50),textMatrix = textMatrix,setStdMargins = FALSE,cex.text = 0.5,zlim = c(-1,1),main = paste("Consensus module--trait relationships across\n",paste(setLabels, collapse = " and ")))
 
-```
-
-
-```{r}
 annot = annos
 # Match probes in the data set to the probe IDs in the annotation file
 probes = names(multiExpr[[1]]$data)
@@ -980,9 +1158,8 @@ colnames(kMEmat) = spaste(c("kME.set1.", "kME.set2.", "p.kME.set1.", "p.kME.set2
 info = data.frame(Probe = probes, GeneSymbol = annot$gene[probes2annot],EntrezID = annot$ensembl[probes2annot],ModuleLabel = moduleLabels,ModuleColor = labels2colors(moduleLabels),kMEmat);
 
 write.csv(info, file = "consensusAnalysis-CombinedNetworkResults_kid_hyp.csv",row.names = FALSE, quote = FALSE);
-```
 
-```{r}
+
 color = "cyan"
 
 wgcna <- info$EntrezID[which(info$ModuleLabel==color)]
@@ -1050,138 +1227,30 @@ GeneTonic(dds = ddstrt1,
 
 res_enrich_mod$mod <- color
 write.csv(res_enrich_mod, file=paste0("results/WGCNAresults/kid_hyp_wgcna_GO",color,".csv"))
-```
-
-Now I will run these test for each tissue independently. 
-in a new script, one per tissue cause life
-
-after running the individual tissue scripts take advantage of the fact that it is in Rs global enviroment and come back to this stuff
-```{r}
-compa_list <- list(
-  gi = res_enrich_gi,
-  lu = res_enrich_lu,
-  liv = res_enrich_liv
-)
-
-gs_horizon(res_enrich_all,
-           compared_res_enrich_list = compa_list,
-           n_gs = 30,
-           sort_by = "clustered")
 
 
-lu <- PCA_graph(lu_dds_trt, "lu")
-liv <- PCA_graph(liv_dds_trt, "liv")
-hyp <- PCA_graph(hyp_dds_trt, "hyp")
-gi <- PCA_graph(gi_dds_trt, "gi")
-all <- PCA_graph(all_dds_trt, "all")
 
-lu+liv+hyp+gi+ all
-```
+for (i in test) {
+test.kid <- plotCounts(kid_dds_trt, gene = i, intgroup = c("trt", "sex"), returnData = TRUE, xlab="trt")
+test.kid$gene <- i
+test.kid$tissue <- "kid"
 
-upsetR
-number of GO terms overlapping each tissue
-```{r}
-#res_enrich_hyp1 <- dplyr::select(res_enrich_hyp, gs_id, DE_count)
-#res_enrich_hyp1$hyp <- as.integer(res_enrich_hyp1$DE_count)
-#res_enrich_hyp1$DE_count <- NULL
+test.liv <- plotCounts(liv_dds_trt, gene = i, intgroup = c("trt", "sex"), returnData = TRUE, xlab="trt")
+test.liv$gene <- i
+test.liv$tissue <- "liv"
 
-res_enrich_all1 <- dplyr::select(res_enrich_all, gs_id, DE_count)
-res_enrich_all1$all <- as.integer(res_enrich_all1$DE_count)
-res_enrich_all1$DE_count <- NULL
+test.lu <- plotCounts(lu_dds_trt, gene = i, intgroup = c("trt", "sex"), returnData = TRUE, xlab="trt")
+test.lu$gene <- i
+test.lu$tissue <- "lu"
 
-res_enrich_liv1 <- dplyr::select(res_enrich_liv, gs_id, DE_count)
-res_enrich_liv1$liv <- as.integer(res_enrich_liv1$DE_count)
-res_enrich_liv1$DE_count <- NULL
+test.gi <- plotCounts(gi_dds_trt, gene = i, intgroup = c("trt", "sex"), returnData = TRUE, xlab="trt")
+test.gi$gene <- i
+test.gi$tissue <- "gi"
 
-res_enrich_lu1 <- dplyr::select(res_enrich_lu, gs_id, DE_count)
-res_enrich_lu1$lu <- as.integer(res_enrich_lu1$DE_count)
-res_enrich_lu1$DE_count <- NULL
+test.hyp <- plotCounts(hyp_dds_trt, gene = i, intgroup = c("trt", "sex"), returnData = TRUE, xlab="trt")
+test.hyp$gene <- i
+test.hyp$tissue <- "hyp"
 
-res_enrich_gi1 <- dplyr::select(res_enrich_gi, gs_id, DE_count)
-res_enrich_gi1$gi <- as.integer(res_enrich_gi1$DE_count)
-res_enrich_gi1$DE_count <- NULL
+datalist[[i]] <- rbind(test.kid, test.liv, test.lu, test.gi, test.hyp)
 
-df_list <- list(res_enrich_all1, res_enrich_liv1, res_enrich_lu1, res_enrich_gi1)
-
-# merge all data frames and move the common column to first position and keep all other columns
-newdf <- df_list %>% purrr::reduce(full_join, by='gs_id') %>% 
-dplyr::select(gs_id, everything())
-
-newdf[is.na(newdf)] = 0
-newdf[newdf > 0] <- 1
-
-library(UpSetR)
-upset(newdf, sets = c("all", "liv", "lu", "gi"), mb.ratio = c(0.55, 0.45), order.by = "freq")
-
-countdata1<-countdata
-
-multi_fun <- function(x){
-  cat <- paste(x[3:4], collapse = "_")
-  
 }
-test <- strsplit(colnames(countdata1), split = "_")
-colnames(countdata1)<-sapply(test,multi_fun)
-
-countdata1[is.na(countdata1)] = 0
-countdata1[countdata1 > 0] <- 1
-
-unique(colnames(countdata1))
-upset(countdata1, sets = c("gi_yes","hyp_yes","all_yes",
-                           "liv_yes","lu_yes","gi_no",
-                           "hyp_no","liv_no","lu_no","all_no" ), 
-                          mb.ratio = c(0.55, 0.45), order.by = "freq")
-
-
-
-#"F_gi_yes","F_hyp_yes","F_all_yes",
-#"F_liv_yes","F_lu_yes" ,"F_gi_no",
-#"F_hyp_no","F_liv_no","F_lu_no",
-#"F_all_no","M_liv_yes","M_all_yes",
-#"M_lu_yes","M_gi_yes","M_hyp_yes",
-#"M_hyp_no","M_all_no","M_liv_no","M_gi_no","M_lu_no"
-```
-
-
-upsetR
-number of genes overlapping each tissue
-```{r}
-restrt_all<- as.data.frame(restrt_all)
-restrt_all$gene <- rownames(restrt_all)
-
-restrt_liv<- as.data.frame(restrt_liv)
-restrt_liv$gene <- rownames(restrt_liv)
-
-restrt_lu<- as.data.frame(restrt_lu)
-restrt_lu$gene <- rownames(restrt_lu)
-
-restrt_gi<- as.data.frame(restrt_gi)
-restrt_gi$gene <- rownames(restrt_gi)
-
-res_enrich_all1 <- dplyr::select(restrt_all, gene, pvalue)
-res_enrich_all1$all <- as.integer(res_enrich_all1$pvalue) + 1
-res_enrich_all1$pvalue <- NULL
-
-res_enrich_liv1 <- dplyr::select(restrt_liv, gene, pvalue)
-res_enrich_liv1$liv <- as.integer(res_enrich_liv1$pvalue)+ 1
-res_enrich_liv1$pvalue <- NULL
-
-res_enrich_lu1 <- dplyr::select(restrt_lu, gene, pvalue)
-res_enrich_lu1$lu <- as.integer(res_enrich_lu1$pvalue)+ 1
-res_enrich_lu1$pvalue <- NULL
-
-res_enrich_gi1 <- dplyr::select(restrt_gi, gene, pvalue)
-res_enrich_gi1$gi <- as.integer(res_enrich_gi1$pvalue)+ 1
-res_enrich_gi1$pvalue <- NULL
-
-df_list <- list(res_enrich_all1, res_enrich_liv1, res_enrich_lu1, res_enrich_gi1)
-
-# merge all data frames and move the common column to first position and keep all other columns
-newdf <- df_list %>% purrr::reduce(full_join, by='gene') %>% 
-dplyr::select(gene, everything())
-
-newdf[is.na(newdf)] = 0
-newdf[newdf > 0] <- 1
-
-library(UpSetR)
-upset(newdf, sets = c("all", "liv", "lu", "gi"), mb.ratio = c(0.55, 0.45), order.by = "freq")
-```

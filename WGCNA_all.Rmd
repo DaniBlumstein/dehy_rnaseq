@@ -172,64 +172,6 @@ no_gene_filtered <- no_gene[no_gene$stat==5,]
 
 
 ```{r}
-#install.packages("fastTopics")
-library(fastTopics)
-
-countdata_p <- countdata %>% mutate(countdata = replace(countdata, which(countdata<0), NA))
-countdata_m <- as.matrix(countdata_p)
-countdata_m<-na.omit(countdata_m)
-
-fit <- fit_topic_model(t(countdata_m),k = 5)
-
-annotation <- data.frame(
-  sample_id = paste0(rownames(fit$L)),
-  tissue_label = factor(str_split_fixed(rownames(fit$L), '_',4)[,3],
-                        levels= rev(c("kid", "liv", "lu", "hyp", "gi"))))
-
-rownames(fit$L) <- as.factor(annotation$tissue_label)
-
-topic_colors <- c("skyblue","forestgreen","darkmagenta","dodgerblue",
-                 "darkorange")
-
-structure_plot(fit,colors = topic_colors,topics = 1:5,gap = 25,
-               grouping = annotation$tissue_labe)
-
-pca <- prcomp(fit$L)$x
-clusters <- kmeans(pca,centers = 5,iter.max = 100)$cluster
-summary(factor(clusters))
-clusters <- factor(clusters)
-
-levels(clusters) <- c("kid","liv","lu","hyp","gi")
-
-structure_plot(fit,colors = topic_colors)
-
-structure_plot(fit,colors = topic_colors,topics = 1:5,gap = 25,
-               grouping = clusters)
-
-pca_plot(fit,fill = clusters) +
-  scale_fill_manual(values = topic_colors)
-
-pca_hexbin_plot(fit,bins = 24)
-
-fit$L
-fit$F
-
-de <- de_analysis(fit,t(countdata_m),pseudocount = 0.1,
-                  control = list(ns = 1e4,nc = 5))
-
-plist_electro <- list()
-plist_electro[["t1"]] <- volcano_plot(de,k = 1)
-plist_electro[["t2"]] <- volcano_plot(de,k = 2)
-plist_electro[["t3"]] <- volcano_plot(de,k = 3)
-plist_electro[["t4"]] <- volcano_plot(de,k = 4)
-plist_electro[["t5"]] <- volcano_plot(de,k = 5)
-
-plots <- gridExtra::grid.arrange(grobs = plist_electro, nrow=3, ncol=2)
-#,labels = de$ar)
-```
-
-
-```{r}
 #### filter samples ########
 A_all=adjacency(t(all_Expr),type="distance")
 # this calculates the whole network connectivity
@@ -257,156 +199,9 @@ plotDendroAndColors(sampleTree_all,groupLabels=names(datColors),
                     colors=datColors,main="Sample Dendrogram and Trait Heatmap")
 ```
 
-```{r}
-#restrt_lu
-#restrt_liv
-#restrt_gi
-#restrt_hyp
-#restrt_kid
-library(RColorBrewer)
-
-kid_lfc <- as.data.frame(cbind(rownames(restrt_kid),restrt_kid$padj, restrt_kid$log2FoldChange))
-kid_lfc <- kid_lfc %>% rename(ensembl = V1,padj_kid = V2,log2FoldChange_kid = V3)
-kid_lfc$ensembl <- as.factor(kid_lfc$ensembl)
-
-hyp_lfc <- as.data.frame(cbind(rownames(restrt_hyp),restrt_hyp$padj, restrt_hyp$log2FoldChange))
-hyp_lfc <- hyp_lfc %>% rename(ensembl = V1,padj_hyp = V2,log2FoldChange_hyp = V3)
-hyp_lfc$ensembl <- as.factor(hyp_lfc$ensembl)
-
-gi_lfc <- as.data.frame(cbind(rownames(restrt_gi),restrt_gi$padj, restrt_gi$log2FoldChange))
-gi_lfc <- gi_lfc %>% rename(ensembl = V1,padj_gi = V2,log2FoldChange_gi = V3)
-gi_lfc$ensembl <- as.factor(gi_lfc$ensembl)
-
-liv_lfc <- as.data.frame(cbind(rownames(restrt_liv),restrt_liv$padj, restrt_liv$log2FoldChange))
-liv_lfc <- liv_lfc %>% rename(ensembl = V1,padj_liv = V2,log2FoldChange_liv = V3)
-liv_lfc$ensembl <- as.factor(liv_lfc$ensembl)
-
-lu_lfc <- as.data.frame(cbind(rownames(restrt_lu),restrt_lu$padj, restrt_lu$log2FoldChange))
-lu_lfc <- lu_lfc %>% rename(ensembl = V1,padj_lu = V2,log2FoldChange_lu = V3)
-lu_lfc$ensembl <- as.factor(lu_lfc$ensembl)
-
-lfc_merge1 <- merge(kid_lfc, hyp_lfc, by = "ensembl",all.x = TRUE)
-lfc_merge2 <- merge(lfc_merge1,gi_lfc,by = "ensembl",all.x = TRUE)
-lfc_merge3 <- merge(lfc_merge2,liv_lfc,by = "ensembl",all.x = TRUE)
-lfc_merge4 <- merge(lfc_merge3,lu_lfc,by = "ensembl",all.x = TRUE)
-lfc_merge <- merge(lfc_merge4,annos,by = "ensembl",all.x = TRUE)
-lfc_merge$ensid <- NULL
-lfc_merge$ensembl <- NULL
-lfc_merge$transcript <- NULL
-lfc_merge$Gene <- NULL
-lfc_merge <- lfc_merge %>% distinct(gene, .keep_all = TRUE)
-rownames(lfc_merge) <- lfc_merge$gene
-lfc_merge$gene <- NULL
 
 
-data_FC <- as.data.frame(cbind(rownames(lfc_merge),lfc_merge$log2FoldChange_kid,lfc_merge$log2FoldChange_hyp, lfc_merge$log2FoldChange_gi, lfc_merge$log2FoldChange_liv, lfc_merge$log2FoldChange_lu))
-
-data_FC <- data_FC %>% rename(gene = V1,kid = V2,hyp = V3,gi=V4,liv=V5, lu=V6)
-data_file <- reshape2::melt(data_FC,measure.vars = c("kid", "hyp", "gi","liv","lu"))
-
-data_Pval<- as.data.frame(cbind(rownames(lfc_merge),lfc_merge$padj_kid,lfc_merge$padj_hyp, lfc_merge$padj_gi, lfc_merge$padj_liv, lfc_merge$padj_lu))
-
-data_Pval <- data_Pval %>% rename(gene = V1,kid = V2,hyp = V3,gi=V4,liv=V5, lu=V6)
-data_Pval <- reshape2::melt(data_Pval,measure.vars = c("kid", "hyp", "gi","liv","lu"))
-data_file$pval <- as.numeric(data_Pval$value)
-data_file$value <- as.numeric(data_file$value)
-
-data_file= data_file[!apply(data_file[,2:3] == 0, 1, FUN = any, na.rm = TRUE),]
-rownames(data_file) <- NULL
-
-data_file$labels=round(data_file$value,3)
-
-theme<-theme(panel.background = element_blank(),panel.border=element_blank(),axis.line = element_line(colour = "black"),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),
-             strip.background=element_blank(),axis.text.x=element_text(colour="black",size=16),axis.text.y=element_text(colour="black",size=16),
-             axis.ticks=element_line(colour="black"),plot.margin=unit(c(1,1,1,1),"line"))
-
-
-grey= unique(subset(data_file,data_file$pval>=0.05)[c("variable", "labels","gene")])
-color= unique(subset(data_file,data_file$pval<0.05)[c("variable", "labels","gene")])
-grey$direction[grey$labels<0]="down"
-grey$direction[grey$labels>=0]="up"
-
-color$direction[color$labels<0]="down"
-color$direction[color$labels>=0]="up"
-
-cbPalette = c("#BF4343", "#4E9571")
-
-ggplot(data = grey , aes(x = labels, y = variable)) +
-  geom_jitter(color = "darkgrey", size = 1.25,height = 0.3) +
-  geom_jitter(
-    data = color,
-    aes(x = labels, y = variable,color=direction), size = 1.3,height = 0.3) + scale_color_manual(values = cbPalette) +
-  scale_x_continuous(breaks = pretty(data_file$value, n = 10)) +  labs(title= "", x= "\nLog2FC", y= "") + 
-  coord_cartesian(xlim = c(-10, 10)) +
-  theme(
-    axis.title.x = element_text( size=16 ),
-    axis.title.y = element_text(size=16)) +
-  #geom_text_repel(aes(label = gene), hjust=0, vjust=0,size=3,parse=TRUE)+
-  theme 
-
-
-```
-
-```{r}
-test <- c("AGT", "CYP2E1", "CYP4B1", "INMT","MTARC1", "PCK1", "SLC27A2", 
-          "SLC38A4")
-
-datalist = list()
-
-for (i in test) {
-test.kid <- plotCounts(kid_dds_trt, gene = i, intgroup = c("trt", "sex"), returnData = TRUE, xlab="trt")
-test.kid$gene <- i
-test.kid$tissue <- "kid"
-
-test.liv <- plotCounts(liv_dds_trt, gene = i, intgroup = c("trt", "sex"), returnData = TRUE, xlab="trt")
-test.liv$gene <- i
-test.liv$tissue <- "liv"
-
-test.lu <- plotCounts(lu_dds_trt, gene = i, intgroup = c("trt", "sex"), returnData = TRUE, xlab="trt")
-test.lu$gene <- i
-test.lu$tissue <- "lu"
-
-test.gi <- plotCounts(gi_dds_trt, gene = i, intgroup = c("trt", "sex"), returnData = TRUE, xlab="trt")
-test.gi$gene <- i
-test.gi$tissue <- "gi"
-
-test.hyp <- plotCounts(hyp_dds_trt, gene = i, intgroup = c("trt", "sex"), returnData = TRUE, xlab="trt")
-test.hyp$gene <- i
-test.hyp$tissue <- "hyp"
-
-datalist[[i]] <- rbind(test.kid, test.liv, test.lu, test.gi, test.hyp)
-
-}
-
-
-big_data = do.call(rbind, datalist)
-
-big_data$trt <- as.factor(big_data$trt)
-big_data$sex <- as.factor(big_data$sex)
-big_data$gene <- as.factor(big_data$gene)
-big_data$tissue <- as.factor(big_data$tissue)
-
-ggplot(big_data,  aes(x = trt, y = count)) + 
-      #ggtitle(title)  + 
-      theme +
-      ylab("Normalized Counts") + 
-      xlab("Tissue") +
-      geom_boxplot(outlier.shape = NA, lwd=.75, aes(fill = trt)) + 
-      geom_point(aes(color = trt), position = position_jitterdodge()) +
-      facet_grid(gene ~ tissue, scales = "free_y") +
-      #scale_fill_manual(values = c("orange1", "red1", "yellow2", "chartreuse4")) +
-      #scale_color_manual(values = c("orange1", "red1", "yellow2", "chartreuse4")) +
-      theme_classic() +
-  #theme(axis.text=element_text(size=18),axis.title=element_text(size=18,face="bold"), plot.title = element_text(size = 18, hjust = 0.5), strip.text.y = element_text(size = 18), strip.text.x = element_text(size = 18),
-theme(panel.border = element_rect(color = "black", fill = NA, size = 1),  legend.title=element_text(size=18), legend.text=element_text(size=18))
-
-#, legend.position = "none")
-
-```
-
-
-
-```{r}
+netowrk graphing. didn't like it so abadonded it 
 traitData$tissue <- as.factor(traitData$tissue )
 
 nodes <- traitData
@@ -461,7 +256,6 @@ for (layout in layouts) {
 print(layout)
 l <- do.call(layout, list(net.sp))
 plot(net.sp, edge.arrow.mode=0, layout=l, main=layout) }
-```
 
 
 ```{r}
@@ -627,7 +421,8 @@ write.csv(MEs_all, file="results/WGCNAresults/ALLSAMPLES_all_MEs_signed.csv")
 write.csv(modTraitP_all, file="results/WGCNAresults/ALLSAMPLES_all_MEs_P_Pearson.csv")
 ```
 
-```{r}
+
+more network graphing i didn't like 
 for ( col in 1:ncol(A_all)){
     colnames(A_all)[col] <- substring(colnames(A_all)[col], 6)
 }
@@ -662,4 +457,3 @@ plot(net, edge.arrow.mode=0, layout=layout_with_mds)
 dev.off()
 
 #barplot(nodes$Freq, col = rownames(ME.dissimilarity), ylim = c(0,5000))
-```

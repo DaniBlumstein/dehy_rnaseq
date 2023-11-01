@@ -308,88 +308,51 @@ write.csv(geneInfo0_hyp, file="results/WGCNAresults/ALLSAMPLES_hyp_wgcna_gene_mo
 ```
 
 
-do tomorrow. brain tired today 
+```{r}
+modTraitP_hyp_long <- reshape2::melt(modTraitP_hyp,measure.vars = c("sex","total_weight_delta","pro_weight","Na","BUN","AnGap","K","Crea","Hct","Cl","Glu","Hb.","TCO2","iCa","trt ",'mean_RQ','mean_EE','mean_H2Og','body_temp_3'))
 
-############### GO enrichment #################
-library(gprofiler2)
-hyp_ref <- geneInfo0_hyp$gene
+modTraitP_hyp_long_sig <- filter(modTraitP_hyp_long, value<0.05)
+for ( col in 1:ncol(modTraitP_hyp_long_sig)){
+    modTraitP_hyp_long_sig$Var1 <-  sub("ME*", "", modTraitP_hyp_long_sig$Var1)
+}
 
-hyp_wgcna_salmon <- geneInfo0_hyp$gene[which(geneInfo0_hyp$moduleColor=="salmon")]
-hyp_wgcna_lightcyan <- geneInfo0_hyp$gene[which(geneInfo0_hyp$moduleColor=="lightcyan")]
-hyp_wgcna_turquoise <- geneInfo0_hyp$gene[which(geneInfo0_hyp$moduleColor=="turquoise")]
-hyp_wgcna_cyan <- geneInfo0_hyp$gene[which(geneInfo0_hyp$moduleColor=="cyan")]
-hyp_wgcna_magenta <- geneInfo0_hyp$gene[which(geneInfo0_hyp$moduleColor=="magenta")]
-hyp_wgcna_tan <- geneInfo0_hyp$gene[which(geneInfo0_hyp$moduleColor=="tan")]
-hyp_wgcna_greenyellow <- geneInfo0_hyp$gene[which(geneInfo0_hyp$moduleColor=="greenyellow")]
-hyp_wgcna_midnightblue <- geneInfo0_hyp$gene[which(geneInfo0_hyp$moduleColor=="midnightblue")]
+modTraitP_hyp_wide_sig <- modTraitP_hyp_long_sig %>% pivot_wider(names_from = Var2, values_from = value)
 
-hyp_wgcna_salmon_GO <- gost(hyp_wgcna_salmon, organism = "hsapiens", 
-                     ordered_query = F, significant = T, exclude_iea = T,
-                     correction_method = "bonferroni",
-                     custom_bg = hyp_ref)
-gostplot(hyp_wgcna_salmon_GO, capped = TRUE, interactive = TRUE)
-sink(file = "results/WGCNAresults/hyp_wgcna_salmon_GO.csv")
-sink()
+genes_mods <- as.data.frame(cbind(rownames(geneInfo0_hyp),geneInfo0_hyp$moduleColor))
+genes_mods_filtered <- filter(genes_mods,
+                       V2 %in% modTraitP_hyp_wide_sig$Var1)
 
+genes_mods_filtered <- genes_mods_filtered %>% rename(gene = V1,color = V2)
+modTraitP_hyp_long_sig <- modTraitP_hyp_long_sig %>% rename(color = Var1,pheno = Var2,pval = value)
 
-hyp_wgcna_lightcyan_GO <- gost(hyp_wgcna_lightcyan, organism = "hsapiens", 
-                     ordered_query = F, significant = T, exclude_iea = T,
-                     correction_method = "bonferroni",
-                     custom_bg = hyp_ref)
-gostplot(hyp_wgcna_lightcyan_GO, capped = TRUE, interactive = TRUE)
-sink(file = "results/WGCNAresults/hyp_wgcna_lightcyan_GO.csv")
-sink()
+combo <- list(genes_mods_filtered,modTraitP_hyp_long_sig)
+combo <- combo %>% reduce(full_join, by="color")
 
+looping <- unique(combo$color)
+hyp_list<-list()
 
-hyp_wgcna_turquoise_GO <- gost(hyp_wgcna_turquoise, organism = "hsapiens", 
-                     ordered_query = F, significant = T, exclude_iea = T,
-                     correction_method = "bonferroni",
-                     custom_bg = hyp_ref)
-gostplot(hyp_wgcna_turquoise_GO, capped = TRUE, interactive = TRUE)
-sink(file = "results/WGCNAresults/hyp_wgcna_turquoise_GO.csv")
-sink()
+for (i in looping) {
+subset <- filter(combo, color==i)
+phenos <- c(unique(as.character(subset$pheno)))
+  for (p in phenos) 
+  {
+    subset2 <- filter(subset, pheno==p)
+    gostres_i <- gost(query = subset2$gene, 
+                organism = "hsapiens", ordered_query = FALSE, 
+                multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
+                measure_underrepresentation = FALSE, evcodes = FALSE, 
+                user_threshold = 0.05, correction_method = "g_SCS", 
+                domain_scope = "annotated", custom_bg = NULL, 
+                numeric_ns = "", sources = NULL, as_short_link = FALSE, highlight = TRUE)
+    go_i <- as.data.frame(cbind(gostres_i$result$term_id,gostres_i$result$term_name, gostres_i$result$term_size,gostres_i$result$p_value))
+    go_i <- top_n(go_i, 20, V4)
+    go_i <- go_i %>% rename(!! paste0(p):=V3)
+  }
+go_i <-select(go_i, -V4)
+hyp_list[[i]]<-go_i
+}
 
+go_wgcna_hyp <- hyp_list %>% reduce(full_join, by=c("V1","V2"))
+```
 
-hyp_wgcna_cyan_GO <- gost(hyp_wgcna_cyan, organism = "hsapiens", 
-                     ordered_query = F, significant = T, exclude_iea = T,
-                     correction_method = "bonferroni",
-                     custom_bg = hyp_ref)
-gostplot(hyp_wgcna_cyan_GO, capped = TRUE, interactive = TRUE)
-sink(file = "results/WGCNAresults/hyp_wgcna_cyan_GO.csv")
-sink()
-
-hyp_wgcna_magenta_GO <- gost(hyp_wgcna_magenta, organism = "hsapiens", 
-                     ordered_query = F, significant = T, exclude_iea = T,
-                     correction_method = "bonferroni",
-                     custom_bg = hyp_ref)
-gostplot(hyp_wgcna_magenta_GO, capped = TRUE, interactive = TRUE)
-sink(file = "results/WGCNAresults/hyp_wgcna_magenta_GO.csv")
-sink()
-
-
-hyp_wgcna_tan_GO <- gost(hyp_wgcna_tan, organism = "hsapiens", 
-                     ordered_query = F, significant = T, exclude_iea = T,
-                     correction_method = "bonferroni",
-                     custom_bg = hyp_ref)
-gostplot(hyp_wgcna_tan_GO, capped = TRUE, interactive = TRUE)
-sink(file = "results/WGCNAresults/hyp_wgcna_tan_GO.csv")
-sink()
-
-
-hyp_wgcna_greenyellow_GO <- gost(hyp_wgcna_greenyellow, organism = "hsapiens", 
-                     ordered_query = F, significant = T, exclude_iea = T,
-                     correction_method = "bonferroni",
-                     custom_bg = hyp_ref)
-gostplot(hyp_wgcna_greenyellow_GO, capped = TRUE, interactive = TRUE)
-sink(file = "results/WGCNAresults/hyp_wgcna_greenyellow_GO.csv")
-sink()
-
-
-hyp_wgcna_midnightblue_GO <- gost(hyp_wgcna_midnightblue, organism = "hsapiens", 
-                     ordered_query = F, significant = T, exclude_iea = T,
-                     correction_method = "bonferroni",
-                     custom_bg = hyp_ref)
-gostplot(hyp_wgcna_midnightblue_GO, capped = TRUE, interactive = TRUE)
-sink(file = "results/WGCNAresults/hyp_wgcna_midnightblue_GO.csv")
-sink()
 
