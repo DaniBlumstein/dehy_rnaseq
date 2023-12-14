@@ -46,6 +46,7 @@ library(readxl)
 library(lubridate)
 library(patchwork)
 library(EnhancedVolcano)
+library(Cairo)
 #library(biomaRt)
 
 ```
@@ -62,6 +63,25 @@ dir.create("results/DEresults")
 dir.create("results/GOresults")
 dir.create("results/WGCNAresults")
 ensembl = useMart( "ensembl", dataset = "hsapiens_gene_ensembl" )
+
+
+save <- function(name, fig_len, fig_width,plot_name)
+  {
+    library(Cairo)
+    
+    Cairo::Cairo(
+      fig_len, #length
+      fig_width, #width
+      file = paste(name, ".png", sep = ""),
+      type = "png", #tiff
+      bg = "transparent", #white or transparent depending on your requirement 
+      dpi = 400,
+      units = "cm" #you can change to pixels etc 
+    )
+    plot(plot_name) #p is your graph object 
+    dev.off()
+  }
+
 ```
 
 make sample name spreadsheet
@@ -131,6 +151,7 @@ samples <- electrolyte_data %>% dplyr::right_join(samples_phys)
 samples$trt <- as.factor(samples$trt)
 samples<- samples[!is.na(samples$filename),]
 samples$pro_weight <- abs(samples$total_weight_delta/samples$weight0)
+samples$sex <- as.factor(samples$sex...5)
 
 write.csv(samples, "results/samplespreadsheet.csv", row.names = FALSE)
 write.csv(cages, "results/cages.csv", row.names = FALSE)
@@ -329,7 +350,6 @@ dds <- dds[idx,]
 
 
 ### Crea a PCA
-
 ```{R PCA}
 vsd <- varianceStabilizingTransformation(dds, blind = FALSE)
 # get PC1 and PC2 data
@@ -475,8 +495,15 @@ all_Expr <- assay(normalized_counts)
 ```
 
 ```{r}
+cols <- c("kid"="#f98e09","liv"="#e45a31","lu"="#bc3754", "hyp"="#932667", "gi" = "#420a68")
+```
+
+
+```{r}
 require(GGally)
 library(vegan)
+
+cca_cols <- c("kid_yes"="#f98e09","kid_no" = "#F1BE78","liv_yes"="#e45a31","liv_no"="#E39F88", "lu_yes"="#bc3754","lu_no"="#CC8B98", "hyp_yes"="#932667","hyp_no"="#B57FA2", "gi_yes" = "#420a68","gi_no"="#886EA0", "in bound" = "darkgrey" ,"outlier"= "#70809c")
 
 genes_for_cca <- read_csv("results/WGCNAresults/genes_for_cca.csv", col_names = FALSE)
 all_Expr<- as.data.frame(all_Expr)
@@ -546,7 +573,7 @@ CCA2_varex<-round(summary(cca_model)$cont$importance[2,2]*100,2) #Get percentage
 scaling_factor <- 2
 library(paletteer)
 
-cca_plot <- ggplot(df_species, 
+cca_plot1 <- ggplot(df_species, 
        aes(x=CCA1, y=CCA2)) + 
   #Draw lines on x = 0 and y = 0
   geom_hline(yintercept=0, 
@@ -562,7 +589,7 @@ cca_plot <- ggplot(df_species,
                 hjust=0.5*(1-sign(CCA1)),#Set the text horizontal alignment according to its position in the CCA plot
                 vjust=0.5*(1-sign(CCA2)),
                 color=factor(color)),#Set the text vertical alignment according to its position in the CCA plot
-            #color = c("darkorange","forestgreen"),
+            #color = c("grey","#160b39"),
             size = 10/.pt)+
   #Add sites text
   geom_point(data=df_sites, 
@@ -575,7 +602,7 @@ cca_plot <- ggplot(df_species,
                    xend=CCA1*scaling_factor,#Ending coordinate in CCA1  
                    y=0, #Start in CCA2 = 0
                    yend=CCA2*scaling_factor), #Ending coordinate in CCA2 
-               color="black", #set color
+               color="white", #set color
                arrow=arrow(length=unit(0.01,"npc"))#Set the size of the lines that form the tip of the arrow
                )+
   #Add environmental vars text
@@ -585,17 +612,21 @@ cca_plot <- ggplot(df_species,
                 label=rownames(df_environ),
                 hjust=0.5*(1-sign(CCA1)),#Add the text of each environmental var at the end of the arrow
                 vjust=0.5*(1-sign(CCA2))),#Add the text of each environmental var at the end of the arrow 
-            color="black")+
+            color="white")+
   #Set bw theme
-  theme_bw()+
-  scale_color_paletteer_d("ggthemes_ptol::qualitative", 12,direction = 1)+
-  xlim(-0.8, 0.5)+
-  ylim(-0.4, 0.7)+
+  theme+
+  scale_color_manual(values=cca_cols, name = df_sites$lable)+
+  #xlim(-0.8, 0.7)+
+  #ylim(-0.5, 0.7)+
   #Set x and y axis titles
   labs(x=paste0("CCA1 (",CCA1_varex," %)"),
-       y=paste0("CCA2 (",CCA2_varex," %)"))
+       y=paste0("CCA2 (",CCA2_varex," %)"))+
+  theme(legend.title=element_blank())
+  #theme(legend.position = "none")
 
-cca_plot
+cca_plot1
+
+save("cca_plot1", 15,15, cca_plot1)
 ```
 
 
@@ -651,7 +682,7 @@ up_go <- na.omit(filter(go, tissue$X2=="up"))
 down_go <- na.omit(filter(go, tissue$X2=="down"))
 
 theme<-theme(panel.background = element_blank(),panel.border=element_blank(),axis.line = element_line(colour = "black"),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),
-             strip.background=element_blank(),axis.text.x=element_text(colour="black",size=16),axis.text.y=element_text(colour="black",size=8),
+             strip.background=element_blank(),axis.text.x=element_text(colour="black",size=10),axis.text.y=element_text(colour="black",size=10),
              axis.ticks=element_line(colour="black"),plot.margin=unit(c(1,1,1,1),"line"))
 
 up <-ggplot(up_go, aes(x = tissue$X1, y = description, color = tissue$X1, size = count)) +
@@ -673,19 +704,19 @@ up|down
 
 ```{r}
 go_wgcna_lu <- dplyr::filter(go_wgcna_lu, grepl('GO', V1))
-go_wgcna_lu <- go_wgcna_lu %>% rename(GO = V1,description = V2,lu_trt = trt,lu_body.temp.1=body_temp_3.x, lu_body.temp.2=body_temp_3.y, lu_wlr.1=mean_H2Og.x,lu_body.temp.3=body_temp_3.x.x,lu_body.temp.4= body_temp_3.y.y,lu_TCO2=TCO2,lu_wlr.2=mean_H2Og.y,lu_iCa = iCa, lu_body.temp.5=body_temp_3,lu_EE=mean_EE)
+go_wgcna_lu <- go_wgcna_lu %>% rename(GO = V1,description = V2,lu_trt = trt,lu_bodyTemp.1=body_temp_3.x, lu_bodyTemp.2=body_temp_3.y, lu_wlr.1=mean_H2Og.x,lu_bodyTemp.3=body_temp_3.x.x,lu_bodyTemp.4= body_temp_3.y.y,lu_TCO2=TCO2,lu_wlr.2=mean_H2Og.y,lu_iCa = iCa, lu_bodyTemp.5=body_temp_3,lu_EE=mean_EE)
 
 go_wgcna_liv <- dplyr::filter(go_wgcna_liv, grepl('GO', V1))
-go_wgcna_liv <- go_wgcna_liv %>% rename(GO = V1,description = V2, liv_body.temp.1=body_temp_3.x, liv_body.temp.2=body_temp_3.y,liv_body.temp.3=body_temp_3.x.x,liv_body.temp.4=body_temp_3.y.y,liv_TCO2.1=TCO2.x,liv_iCa=iCa,liv_body.temp.5=body_temp_3.x.x.x,liv_body.temp.6=body_temp_3.y.y.y,liv_EE.1=mean_EE.x,liv_body.temp.7=body_temp_3.x.x.x.x,liv_wlr.1=mean_H2Og.x,liv_trt=trt,liv_body.temp.8=body_temp_3.y.y.y.y,liv_TCO2.2=TCO2, liv_EE.2=mean_EE.y,liv_wlr.2=mean_H2Og.y,liv_TCO2.3= TCO2.y)
+go_wgcna_liv <- go_wgcna_liv %>% rename(GO = V1,description = V2, liv_bodyTemp.1=body_temp_3.x, liv_bodyTemp.2=body_temp_3.y,liv_bodyTemp.3=body_temp_3.x.x,liv_bodyTemp.4=body_temp_3.y.y,liv_TCO2.1=TCO2.x,liv_iCa=iCa,liv_bodyTemp.5=body_temp_3.x.x.x,liv_bodyTemp.6=body_temp_3.y.y.y,liv_EE.1=mean_EE.x,liv_bodyTemp.7=body_temp_3.x.x.x.x,liv_wlr.1=mean_H2Og.x,liv_trt=trt,liv_bodyTemp.8=body_temp_3.y.y.y.y,liv_TCO2.2=TCO2, liv_EE.2=mean_EE.y,liv_wlr.2=mean_H2Og.y,liv_TCO2.3= TCO2.y)
 
 go_wgcna_gi <- dplyr::filter(go_wgcna_gi, grepl('GO', V1))
-go_wgcna_gi <- go_wgcna_gi %>% rename(GO = V1,description = V2,gi_Cl=Cl,gi_trt.1 = trt.x,gi_Crea=Crea,gi_Hb.1=Hb..x,gi_trt.2=trt.y,gi_body.temp.1=body_temp_3.x,gi_trt.3=trt.x.x,gi_wlr.1=mean_H2Og.x,gi_trt.4=trt.y.y,gi_Hb.2=Hb..y,gi_wlr.2=mean_H2Og.y,gi_wlr.3=mean_H2Og,gi_body.temp.2=body_temp_3.y,gi_Hb.3=Hb.,gi_trt.5=trt,gi_body.temp.3=body_temp_3)
+go_wgcna_gi <- go_wgcna_gi %>% rename(GO = V1,description = V2,gi_Cl=Cl,gi_trt.1 = trt.x,gi_Crea=Crea,gi_Hb.1=Hb..x,gi_trt.2=trt.y,gi_bodyTemp.1=body_temp_3.x,gi_trt.3=trt.x.x,gi_wlr.1=mean_H2Og.x,gi_trt.4=trt.y.y,gi_Hb.2=Hb..y,gi_wlr.2=mean_H2Og.y,gi_wlr.3=mean_H2Og,gi_bodyTemp.2=body_temp_3.y,gi_Hb.3=Hb.,gi_trt.5=trt,gi_bodyTemp.3=body_temp_3)
 
 go_wgcna_hyp <- dplyr::filter(go_wgcna_hyp, grepl('GO', V1))
-go_wgcna_hyp <- go_wgcna_hyp %>% rename(GO = V1,description = V2,hyp_Crea.1=Crea.x,hyp_TCO2=TCO2,hyp_trt = trt,hyp_body.temp=body_temp_3,hyp_Crea.2=Crea.y,hyp_EE =mean_EE)
+go_wgcna_hyp <- go_wgcna_hyp %>% rename(GO = V1,description = V2,hyp_Crea.1=Crea.x,hyp_TCO2=TCO2,hyp_trt = trt,hyp_bodyTemp=body_temp_3,hyp_Crea.2=Crea.y,hyp_EE =mean_EE)
 
 go_wgcna_kid <- dplyr::filter(go_wgcna_kid, grepl('GO', V1))
-go_wgcna_kid <- go_wgcna_kid %>% rename(GO = V1,description = V2,kid_trt.1 =trt.x,kid_wlr.1 =mean_H2Og.x,kid_trt.2 =trt.y,kid_Cl.1 =Cl.x,kid_body.temp.1 =body_temp_3.x,kid_wlr.2 =mean_H2Og.y ,kid_K.1 =K.x,kid_Hb =Hb.,kid_wlr.3 =mean_H2Og.x.x,kid_wlr.4 =mean_H2Og.y.y,kid_wlr.5 =mean_H2Og,kid_Glu.1 =Glu.x,kid_body.temp.2 =body_temp_3.y,kid_body.temp.3 =body_temp_3,kid_Cl.2 =Cl.y,kid_TCO2 =TCO2,kid_RQ =mean_RQ,kid_Glu.2 =Glu.y,kid_K.2 =K.y)
+go_wgcna_kid <- go_wgcna_kid %>% dplyr::rename(GO = V1,description = V2,kid_trt.1 =trt.x,kid_trt.2 =trt.y,kid_Cl.1 =Cl,kid_bodyTemp.1 =body_temp_3,kid_wlr.2 =mean_H2Og.x ,kid_K.1 =K,kid_wlr.5 =mean_H2Og.y,kid_bodyTemp.3 =body_temp_3,kid_RQ =mean_RQ)
 
 go_wgcna_list <- list(go_wgcna_lu,go_wgcna_liv,go_wgcna_gi,go_wgcna_hyp,go_wgcna_kid)
 go_wgcna <- go_wgcna_list %>% reduce(full_join, by=c("GO","description"))
@@ -696,7 +727,10 @@ rotate <- rotate[-1]
 go_wgcna <- reshape2::melt(go_wgcna,measure.vars = rotate)
 unique(go_wgcna$variable)
 go_wgcna<- within(go_wgcna, variable<-data.frame(do.call('rbind', strsplit(as.character(variable), '_', fixed=TRUE))))
-go_wgcna <- go_wgcna %>% rename(count = value)
+go_wgcna<- within(go_wgcna, variable$X2 <-data.frame(do.call('rbind', strsplit(as.character(variable$X2 ), '.', fixed=TRUE))))
+
+
+go_wgcna <- go_wgcna %>% dplyr::rename(count = value)
 go_wgcna$count <- as.numeric(go_wgcna$count)
 
 go_wgcna_clean <- na.omit(go_wgcna)
@@ -706,40 +740,59 @@ go_wgcna_clean_lu <- filter(go_wgcna_clean, variable$X1=="lu")
 go_wgcna_clean_gi <- filter(go_wgcna_clean, variable$X1=="gi")
 go_wgcna_clean_kid <- filter(go_wgcna_clean, variable$X1=="kid")
 
+go_wgcna_clean_lu_subset<-go_wgcna_clean_lu[c(3,12,19,31,34,41,50),]
+go_wgcna_clean_liv_subset<-go_wgcna_clean_liv[c(1,5,6,16,21,24,26,34,47,59,64,69,79, 96,103,107,108,112,123),]
+go_wgcna_clean_gi_subset<-go_wgcna_clean_gi[c(4,15,16,19,23,24,66,86,87,88,93,107,118,124,138,165),]
+go_wgcna_clean_hyp_subset<-go_wgcna_clean_hyp[c(2,22,26,28,34,35,40,48,52,54,63,64),]
+go_wgcna_clean_kid_subset<-go_wgcna_clean_kid[c(1,15,18,21, 30, 34,35,41,43,48,51,52,25,31),]
+ 
 
-hyp <- ggplot(go_wgcna_clean_hyp, aes(x = variable$X2, y = description, color = variable$X2, size = count)) +
-  geom_point()+
-  theme+
-  ggtitle("wgcna go")+
-  theme(legend.position = "none")
+hyp <- ggplot(go_wgcna_clean_hyp_subset, aes(x = variable$X2$X1, y = description, color = variable$X2$X1, size = count)) +
+  geom_point(colour="#932667")+
+  theme_classic() +
+      theme(panel.border = element_rect(color = "black", fill = NA, size = .5),  legend.title=element_text(size=18), legend.text=element_text(size=18),axis.text.x=element_text(colour="black",size=15,angle = 45, vjust=1, hjust=1),axis.text.y=element_text(colour="black",size=15),axis.title.y = element_blank())+
+  ggtitle("wgcna go hyp")+
+  theme(legend.position = "none") +
+  xlab("")
 
-liv <- ggplot(go_wgcna_clean_liv, aes(x = variable$X2, y = description, color = variable$X2, size = count)) +
-  geom_point()+
-  theme+
-  ggtitle("wgcna go")+
-  theme(legend.position = "none")
+liv <- ggplot(go_wgcna_clean_liv_subset, aes(x = variable$X2$X1, y = description, color = variable$X2$X1, size = count)) +
+  geom_point(colour="#e45a31")+
+theme_classic() +
+      theme(panel.border = element_rect(color = "black", fill = NA, size = .5),  legend.title=element_text(size=18), legend.text=element_text(size=18),axis.text.x=element_text(colour="black",size=15,angle = 45, vjust=1, hjust=1),axis.text.y=element_text(colour="black",size=15),axis.title.y = element_blank())+
+  ggtitle("wgcna go liv")+
+  theme(legend.position = "none") +
+  xlab("")
 
-lu <- ggplot(go_wgcna_clean_lu, aes(x = variable$X2, y = description, color = variable$X2, size = count)) +
-  geom_point()+
-  theme+
-  ggtitle("wgcna go")+
-  theme(legend.position = "none")
+lu <- ggplot(go_wgcna_clean_lu_subset, aes(x = variable$X2$X1, y = description, color = variable$X2$X1, size = count)) +
+  geom_point(colour="#bc3754")+
+theme_classic() +
+      theme(panel.border = element_rect(color = "black", fill = NA, size = .5),  legend.title=element_text(size=18), legend.text=element_text(size=18),axis.text.x=element_text(colour="black",size=15,angle = 45, vjust=1, hjust=1),axis.text.y=element_text(colour="black",size=15),axis.title.y = element_blank())+
+  ggtitle("wgcna go lu")+
+  theme(legend.position = "none") +
+  xlab("")
 
-gi <- ggplot(go_wgcna_clean_gi, aes(x = variable$X2, y = description, color = variable$X2, size = count)) +
-  geom_point()+
-  theme+
-  ggtitle("wgcna go")+
-  theme(legend.position = "none")
+gi <- ggplot(go_wgcna_clean_gi_subset, aes(x = variable$X2$X1, y = description, color = variable$X2$X1, size = count)) +
+  geom_point(colour="#420a68")+
+theme_classic() +
+      theme(panel.border = element_rect(color = "black", fill = NA, size = .5),  legend.title=element_text(size=18), legend.text=element_text(size=18),axis.text.x=element_text(colour="black",size=15,angle = 45, vjust=1, hjust=1),axis.text.y=element_text(colour="black",size=15),axis.title.y = element_blank())+
+  ggtitle("wgcna go gi")+
+  theme(legend.position = "none") +
+  xlab("")
 
-kid <- ggplot(go_wgcna_clean_kid, aes(x = variable$X2, y = description, color = variable$X2, size = count)) +
-  geom_point()+
-  theme+
-  ggtitle("wgcna go")+
-  theme(legend.position = "none")
 
-kid/liv|gi/hyp/lu
+kid <- ggplot(go_wgcna_clean_kid_subset, aes(x = variable$X2$X1, y = description, color = variable$X2$X1, size = count)) +
+  geom_point(colour="#f98e09")+
+theme_classic() +
+  scale_fill_manual(values=cols, name = go_wgcna_clean_kid_subset$variable$X2$X1)+
+      theme(panel.border = element_rect(color = "black", fill = NA, size = .5),  legend.title=element_text(size=18), legend.text=element_text(size=18),axis.text.x=element_text(colour="black",size=15,angle = 45, vjust=1, hjust=1),axis.text.y=element_text(colour="black",size=15),axis.title.y = element_blank())+
+  ggtitle("wgcna go kid")+
+  theme(legend.position = "none")+
+  xlab("")
 
-go_wgcna_clean_lu
+gi/liv|hyp/kid/lu
+
+save("wgcna_go", 37,37, gi/liv|hyp/kid/lu)
+
 ```
 
 
@@ -760,8 +813,6 @@ gostplot(gostres, capped = TRUE, interactive = TRUE)
 
 ```
 
-Now I will run these test for each tissue independently. 
-in a new script, one per tissue cause life
 
 ```{r}
 #restrt_lu
@@ -829,27 +880,31 @@ theme<-theme(panel.background = element_blank(),panel.border=element_blank(),axi
 
 grey= unique(subset(data_file,data_file$pval>=0.05)[c("variable", "labels","gene")])
 color= unique(subset(data_file,data_file$pval<0.05)[c("variable", "labels","gene")])
-grey$direction[grey$labels<0]="down"
-grey$direction[grey$labels>=0]="up"
+grey$direction[grey$labels<0.05]="down"
+grey$direction[grey$labels>0.05]="up"
 
 color$direction[color$labels<0]="down"
 color$direction[color$labels>=0]="up"
 
-cbPalette = c("#BF4343", "#4E9571")
+cbPalette = c("darkgrey"="darkgrey","down"="#3e4989","up"="#1f9e89")
 
-ggplot(data = grey , aes(x = labels, y = variable)) +
-  geom_jitter(color = "darkgrey", size = 1.25,height = 0.3) +
-  geom_jitter(
-    data = color,
-    aes(x = labels, y = variable,color=direction), size = 1.3,height = 0.3) + scale_color_manual(values = cbPalette) +
+vol_plot <- ggplot(data = grey, aes(x = labels, y = variable)) +
+  geom_jitter(data = grey , aes(color = "darkgrey"),size = 1.25,height = 0.3) +
+  geom_jitter(data = color,aes(x = labels, y = variable, color=direction), size = 1.3,height = 0.3) +
+  scale_color_manual(values = cbPalette, labels = c("insignificant",'down','up'),name = 'direction') +
   scale_x_continuous(breaks = pretty(data_file$value, n = 10)) +  labs(title= "", x= "\nLog2FC", y= "") + 
-  coord_cartesian(xlim = c(-10, 10)) +
+  coord_cartesian(xlim = c(-7, 5)) +
   theme(
     axis.title.x = element_text( size=16 ),
-    axis.title.y = element_text(size=16)) +
+    axis.title.y = element_text(size=16),
+    legend.text = element_text(size=16),
+    legend.title = element_text(size=16)) +
   #geom_text_repel(aes(label = gene), hjust=0, vjust=0,size=3,parse=TRUE)+
   theme 
+vol_plot
 
+save("vol_plot", 20,20, vol_plot)
+cols <- c("kid"="#f98e09","liv"="#e45a31","lu"="#bc3754", "hyp"="#932667", "gi" = "#420a68")
 
 ```
 
@@ -875,21 +930,21 @@ big_data$gene <- as.factor(big_data$gene)
 big_data$tissue <- as.factor(big_data$tissue)
 big_data$count <- as.numeric(big_data$count)
 
-
-ggplot(big_data,  aes(x = trt, y = log(count), fill = tissue, alpha=trt)) + 
+coo_genes <- ggplot(big_data,  aes(x = trt, y = log10(count), fill = tissue, alpha = trt)) + 
       #ggtitle(title)  + 
       theme +
-      ylab("log transofrmed Normalized Counts") + 
-      xlab("Tissue") +
-      geom_boxplot(outlier.shape = NA, lwd=.75) + 
-      geom_point(aes(color=tissue),position = position_jitterdodge()) +
+      ylab("Normalized counts (Log10 transformed)") + 
+      xlab("water access") +
+      geom_violin(width=1.4) +
+      geom_boxplot(width=0.1, color="grey", alpha=0.2) +
       facet_grid(gene~tissue , scales = "free") +
       theme_classic() +
-      theme(panel.border = element_rect(color = "black", fill = NA, size = .5),  legend.title=element_text(size=18), legend.text=element_text(size=18),axis.text.x=element_text(colour="black",size=10),axis.text.y=element_text(colour="black",size=10))+
-  scale_fill_manual(values=natparks.pals("BryceCanyon",5))+
-  scale_color_manual(values=natparks.pals("BryceCanyon",5))
+      theme(panel.border = element_rect(color = "black", fill = NA, size = .5),  legend.title=element_text(size=10), legend.text=element_text(size=10),axis.text.x=element_text(colour="black",size=10),axis.text.y=element_text(colour="black",size=10))+
+      guides(alpha = FALSE)+
+      scale_fill_manual(values=cols, name = "tissue")+
+      scale_alpha_discrete(range=c(0.6, 1))
 
-
+save("coo_genes", 20,20, coo_genes)
 ```
 multi wgcna. didn't like it so didn't use it 
 

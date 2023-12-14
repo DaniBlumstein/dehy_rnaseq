@@ -27,8 +27,8 @@ library(readr)
 ```{r}
 setwd("/Users/danielleblumstein/Documents/UNH/rnaseq/dehy_final")
 countdata<-read.table(file = "data/gene.level.count.data.tsv", header = TRUE)
-samples<- read_csv("results/samplespreadsheet.csv")
-annos <- read_csv("/Users/danielleblumstein/Documents/UNH/rnaseq/dehy_final/data/annos.txt")
+samples<- read.csv("results/samplespreadsheet.csv")
+annos <- read.csv("/Users/danielleblumstein/Documents/UNH/rnaseq/dehy_final/data/annos.txt")
 annos$ensid =  mapIds(org.Hs.eg.db,
                     keys=annos$gene, 
                     column="ENSEMBL",
@@ -46,13 +46,13 @@ kid_dds_trt <- DESeqDataSetFromMatrix(countData = kid_countdata,
                                        colData = kid_samples,
                                        design = ~ trt + sex)
 
-
+dim(kid_countdata)
 #filter out genes where there are less than 8 samples with normalized counts greater than or equal to 10.
 kid_dds_trt <- estimateSizeFactors(kid_dds_trt)
-#idx <- rowSums(counts(kid_dds_trt, normalized=TRUE) >= 10 ) >= 8
+idx <- rowSums(counts(kid_dds_trt, normalized=TRUE) >= 10 ) >= 8
 
-#kid_dds_trt <- kid_dds_trt[idx,]
-#print(paste("Number of genes after filtering by total expression:", nrow(kid_dds_trt)))
+kid_dds_trt <- kid_dds_trt[idx,]
+print(paste("Number of genes after filtering by total expression:", nrow(kid_dds_trt)))
 matrix <- as.data.frame(counts(kid_dds_trt))
 
 #kid_dds_trt$trt_combo <- factor(paste0(kid_dds_trt$trt, kid_dds_trt$sex))
@@ -104,7 +104,7 @@ traitData_kid$sex <- as.numeric(as.factor(traitData_kid$sex))
 
 # Choose columns of trait dataset to be used in downstream analyses
 colnames(traitData_kid)
-traitData_kid <- traitData_kid %>% dplyr::select(c('sex','total_weight_delta',"pro_weight","Na","BUN","AnGap","K","Crea","Hct","Cl","Glu","Hb*","TCO2","iCa","trt","mean_RQ","mean_EE","mean_H2Og","body_temp_3"))
+traitData_kid <- traitData_kid %>% dplyr::select(c('sex','total_weight_delta',"pro_weight","Na","BUN","AnGap","K","Crea","Hct","Cl","Glu","Hb.","TCO2","iCa","trt","mean_RQ","mean_EE","mean_H2Og","body_temp_3"))
 traitData_kid <- as.data.frame(lapply(traitData_kid, as.numeric))
 ```
 
@@ -168,10 +168,10 @@ text(sft_kid$fitIndices[,1],sft_kid$fitIndices[,5],labels=powers,col="red", cex=
 dim(kid_Expr)
 
 
-mergingThresh = 0.25
+merkidngThresh = 0.25
 net_kid = blockwiseModules(kid_Expr,corType="pearson",
                           maxBlockSize=14000,networkType="signed hybrid",power=21,minModuleSize=20,
-                          mergeCutHeight=mergingThresh,numericLabels=F,saveTOMs=TRUE,
+                          mergeCutHeight=merkidngThresh,numericLabels=F,saveTOMs=TRUE,
                           pamRespectsDendro=FALSE,saveTOMFileBase="kid_TEST")
 
 ```
@@ -228,17 +228,17 @@ par(mar = c(6, 8.5, 3, 3))
 labeledHeatmap(Matrix = modTraitCor_kid, xLabels = names(traitData_kid),
                yLabels = names(MEs_kid), ySymbols = names(MEs_kid), 
                colorLabels =FALSE,colors=blueWhiteRed(50),textMatrix=textMatrix_kid,
-               setStdMargins = FALSE, cex.text = 0.4, zlim = c(-1,1),
+               setStdMarkidns = FALSE, cex.text = 0.4, zlim = c(-1,1),
                main = paste("Module-trait relationships, kid"))
 png("figures/kid_WGCNA_heatmap.png", width = 9.5, height = 12, units = "in", res = 300)
 ```
 
-mod merging
-Now, using the new found measurements of dissimilarity, you can construct a cluster tree. You will also be adding a line at the height of .25. This height corresponds to a correlation of over 75%. Any branches below this line are more than 75% related, and you will thus be merging them!
+mod merkidng
+Now, using the new found measurements of dissimilarity, you can construct a cluster tree. You will also be adding a line at the height of .25. This height corresponds to a correlation of over 75%. Any branches below this line are more than 75% related, and you will thus be merkidng them!
 ```{r}
 ME.dissimilarity = 1-cor(MEs0kid, use="complete") #Calculate eigengene dissimilarity
 METree = hclust(as.dist(ME.dissimilarity), method = "average") #Clustering eigengenes 
-par(mar = c(0,4,2,0)) #seting margin sizes
+par(mar = c(0,4,2,0)) #seting markidn sizes
 par(cex = 0.6);#scaling the graphic
 plot(METree)
 abline(h=.25, col = "red") #a height of .25 corresponds to correlation of .75
@@ -250,10 +250,10 @@ mergedColors = merge$colors
 mergedMEs = merge$newMEs
 
 plotDendroAndColors(net_kid$dendrograms[[blocknumber]], cbind(moduleColors_kid, mergedColors), 
-c("Original Module", "Merged Module"),
+c("Orikidnal Module", "Merged Module"),
 dendroLabels = FALSE, hang = 0.03,
 addGuide = TRUE, guideHang = 0.05,
-main = "Gene dendrogram and module colors for original and merged modules")
+main = "Gene dendrogram and module colors for orikidnal and merged modules")
 ```
 
 
@@ -327,7 +327,7 @@ E(net)$edge.arrow.mode <- 0
 
 layouts <- grep("^layout_", ls("package:igraph"), value=TRUE)[-1]
 # Remove layouts that do not apply to our graph.
-layouts <- layouts[!grepl("bipartite|merge|norm|sugiyama|tree", layouts)]
+layouts <- layouts[!grepl("bipartite|merge|norm|sukidyama|tree", layouts)]
 par(mfrow=c(3,3), mar=c(1,1,1,1))
 for (layout in layouts) {
 print(layout)
@@ -353,7 +353,7 @@ traitData_kid$sex <- as.numeric(as.factor(traitData_kid$sex))
 
 # Choose columns of trait dataset to be used in downstream analyses
 colnames(traitData_kid)
-traitData_kid <- traitData_kid %>% select(c('sex','total_weight_delta',"pro_weight","Na","BUN","AnGap","K","Crea","Hct","Cl","Glu","Hb*","TCO2","iCa","trt","mean_RQ","mean_EE","mean_H2Og","body_temp_3","sample"))
+traitData_kid <- traitData_kid %>% dplyr::select(c('sex','total_weight_delta',"pro_weight","Na","BUN","AnGap","K","Crea","Hct","Cl","Glu","Hb.","TCO2","iCa","trt","mean_RQ","mean_EE","mean_H2Og","body_temp_3","sample"))
 
 MEs_kid<- read.csv("results/WGCNAresults/ALLSAMPLES_kid_MEs_signed.csv", header = TRUE)
 MEs_kid$X <-  sub("X*", "", MEs_kid$X)
@@ -391,9 +391,11 @@ for (mod in 1:ncol(geneModuleMembership_kid))
 geneInfo0_kid$ensid <- NULL
 
 write.csv(geneInfo0_kid, file="results/WGCNAresults/ALLSAMPLES_kid_wgcna_gene_module_membership_pearson_signed.csv")
+dim(geneInfo0_kid)
 ```
 
 
+GO
 ```{r}
 modTraitP_kid_long <- reshape2::melt(modTraitP_kid,measure.vars = c("sex","total_weight_delta","pro_weight","Na","BUN","AnGap","K","Crea","Hct","Cl","Glu","Hb.","TCO2","iCa","trt ",'mean_RQ','mean_EE','mean_H2Og','body_temp_3'))
 
@@ -408,16 +410,20 @@ genes_mods <- as.data.frame(cbind(rownames(geneInfo0_kid),geneInfo0_kid$moduleCo
 genes_mods_filtered <- filter(genes_mods,
                        V2 %in% modTraitP_kid_wide_sig$Var1)
 
-genes_mods_filtered <- genes_mods_filtered %>% rename(gene = V1,color = V2)
-modTraitP_kid_long_sig <- modTraitP_kid_long_sig %>% rename(color = Var1,pheno = Var2,pval = value)
+genes_mods_filtered$gene <- genes_mods_filtered$V1
+genes_mods_filtered$color <- genes_mods_filtered$V2
+
+modTraitP_kid_long_sig$color <-modTraitP_kid_long_sig$Var1
+modTraitP_kid_long_sig$pheno <-modTraitP_kid_long_sig$Var2
+modTraitP_kid_long_sig$pval <- modTraitP_kid_long_sig$value
+
 
 combo <- list(genes_mods_filtered,modTraitP_kid_long_sig)
 combo <- combo %>% reduce(full_join, by="color")
 
 looping <- unique(combo$color)
-looping <-looping[-11] #pink has no go terms
-looping <-looping[-15] #paleturquoise has no go terms
 kid_list<-list()
+
 
 for (i in looping) {
 subset <- filter(combo, color==i)
@@ -434,12 +440,31 @@ phenos <- c(unique(as.character(subset$pheno)))
                 numeric_ns = "", sources = NULL, as_short_link = FALSE, highlight = TRUE)
     go_i <- as.data.frame(cbind(gostres_i$result$term_id,gostres_i$result$term_name, gostres_i$result$term_size,gostres_i$result$p_value))
     go_i <- top_n(go_i, 20, V4)
-    go_i <- go_i %>% rename(!! paste0(p):=V3)
+    go_i <- as.data.frame(go_i)
+    go_i <- go_i %>% dplyr::rename(!! paste0(p):=V3)
   }
-go_i <-select(go_i, -V4)
+go_i <-dplyr::select(go_i, -V4)
 kid_list[[i]]<-go_i
 }
 
 go_wgcna_kid <- kid_list %>% reduce(full_join, by=c("V1","V2"))
 ```
 
+
+```{r}
+unique(geneInfo0_kid$moduleColor)
+
+subset <- filter(combo, color=="darkgreen")
+phenos <- c(unique(as.character(subset$pheno)))
+subset2 <- filter(subset, pheno=="Glu")
+
+wgcna <- subset2$gene
+kid_dds_trt1 <- subset(kid_dds_trt, rownames(kid_dds_trt) %in% wgcna)
+restrt <- results(kid_dds_trt1, alpha = 0.01, contrast = c("trt", "yes", "no"))
+pdata <- as.data.frame(restrt)
+
+p2 <- ggplot(pdata, aes(log2FoldChange, -log10(padj))) +
+  geom_point()+
+  ylim(0,0.4)
+p2
+```

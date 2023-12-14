@@ -71,8 +71,6 @@ liv_dds_trt <- liv_dds_trt[!rownames(liv_dds_trt) == "NULL", ]
 liv_dds_trt <- estimateSizeFactors(liv_dds_trt)
 normalized_counts <- vst(liv_dds_trt, blind = FALSE)
 liv_Expr <- assay(normalized_counts)
-
-liv <- heatmap(liv_Expr,Rowv=NA, col=rev(brewer.pal(9,"RdBu")))
 ```
 ## now you have normalized read counts - yay!
 
@@ -353,5 +351,22 @@ liv_list[[i]]<-go_i
 }
 
 go_wgcna_liv <- liv_list %>% reduce(full_join, by=c("V1","V2"))
+```
+
+```{r}
+unique(geneInfo0_liv$moduleColor)
+
+subset <- filter(combo, color=="brown")
+phenos <- c(unique(as.character(subset$pheno)))
+subset2 <- filter(subset, pheno=="body_temp_3")
+
+wgcna <- subset2$gene
+liv_dds_trt1 <- subset(liv_dds_trt, rownames(liv_dds_trt) %in% wgcna)
+restrt <- results(liv_dds_trt1, alpha = 0.01, contrast = c("trt", "yes", "no"))
+pdata <- as.data.frame(restrt)
+
+p2 <- ggplot(pdata, aes(log2FoldChange, -log10(padj))) +
+  geom_point()
+p2
 ```
 

@@ -41,7 +41,7 @@ annos$ensid = mapIds(org.Hs.eg.db,
 hyp_countdata <- dplyr::select(countdata, contains("hyp"))
 hyp_samples <-samples %>% filter(tissue == "hyp") 
 hyp_samples$trt <- as.factor(hyp_samples$trt)
-hyp_samples$sex <- as.factor(hyp_samples$sex)
+hyp_samples$sex <- as.factor(hyp_samples$sex...5)
 
 hyp_dds_trt <- DESeqDataSetFromMatrix(countData = hyp_countdata,
                                        colData = hyp_samples,
@@ -71,8 +71,6 @@ hyp_dds_trt <- hyp_dds_trt[!rownames(hyp_dds_trt) == "NULL", ]
 hyp_dds_trt <- estimateSizeFactors(hyp_dds_trt)
 normalized_counts <- vst(hyp_dds_trt, blind = FALSE)
 hyp_Expr <- assay(normalized_counts)
-
-hyp <- heatmap(hyp_Expr,Rowv=NA, col=rev(brewer.pal(9,"RdBu")))
 ```
 ## now you have normalized read counts - yay!
 
@@ -355,4 +353,20 @@ hyp_list[[i]]<-go_i
 go_wgcna_hyp <- hyp_list %>% reduce(full_join, by=c("V1","V2"))
 ```
 
+```{r}
+unique(geneInfo0_hyp$moduleColor)
+
+subset <- filter(combo, color=="midnightblue")
+phenos <- c(unique(as.character(subset$pheno)))
+subset2 <- filter(subset, pheno=="TCO2")
+
+wgcna <- subset2$gene
+hyp_dds_trt1 <- subset(hyp_dds_trt, rownames(hyp_dds_trt) %in% wgcna)
+restrt <- results(hyp_dds_trt1, alpha = 0.01, contrast = c("trt", "yes", "no"))
+pdata <- as.data.frame(restrt)
+
+p2 <- ggplot(pdata, aes(log2FoldChange, -log10(padj))) +
+  geom_point()
+p2
+```
 
