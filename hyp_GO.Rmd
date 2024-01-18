@@ -303,6 +303,8 @@ hyp_res_trt$symbol <- mcols(hyp_res_trt)$symbol
 table(ressex[,"padj"] < 0.05)
 summary(ressex)
 SigGeneWrapper(ressex, 0.05, "sex")
+
+ressex_hyp <-ressex
 ```
 
 best model for downstream things right now
@@ -323,7 +325,7 @@ matrix <- as.data.frame(counts(ddstrt))
 ddstrt <- DESeq(ddstrt, test="Wald")
 
 #rename transcript rows to ensid names
-rownames(ddstrt)=annos$ensid[match(names(ddstrt),annos$gene)]
+#rownames(ddstrt)=annos$ensid[match(names(ddstrt),annos$gene)]
 #remove the NAs (those transcripts dont have a ensid name)
 ddstrt <- ddstrt[complete.cases(rownames(ddstrt)), ]
 ddstrt <- ddstrt[!rownames(ddstrt) == "NULL", ] 
@@ -341,7 +343,7 @@ summary(restrt)
 SigGeneWrapper(restrt, 0.05, "trt")
 
 restrt_hyp <-restrt
-
+write.csv(restrt_hyp, file="results/GOresults/hyp/restrt_hyp.csv")
 
 
 vsd <- varianceStabilizingTransformation(ddstrt, blind = FALSE)
@@ -426,8 +428,8 @@ ggsave("figures/hyp/hyp_DE_plots.png", plot = hyp_DE_plots, width = 8, height = 
 ```
 
 ```{r}
-up_hyp <- filter(as.data.frame(restrt), log2FoldChange > 0, padj < 0.05)
-gostres_hyp_up <- gost(query = up_hyp$hgnc_symbol, 
+up_hyp <- filter(as.data.frame(restrt_hyp), log2FoldChange > 0, padj < 0.05)
+gostres_hyp_up <- gost(query = rownames(up_hyp), 
                 organism = "hsapiens", ordered_query = FALSE, 
                 multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
                 measure_underrepresentation = FALSE, evcodes = FALSE, 
@@ -441,8 +443,8 @@ go_hyp_up$DE <- "up"
 go_hyp_up <- dplyr::filter(go_hyp_up, grepl('GO', V1))
 go_hyp_up <- top_n(go_hyp_up, 20, V4)
 
-down_hyp <- filter(as.data.frame(restrt), log2FoldChange < 0, padj < 0.05)
-gostres_hyp_down <- gost(query = down_hyp$hgnc_symbol, 
+down_hyp <- filter(as.data.frame(restrt_hyp), log2FoldChange < 0, padj < 0.05)
+gostres_hyp_down <- gost(query = rownames(down_hyp), 
                 organism = "hsapiens", ordered_query = FALSE, 
                 multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
                 measure_underrepresentation = FALSE, evcodes = FALSE, 

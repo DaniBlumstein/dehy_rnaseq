@@ -303,6 +303,8 @@ gi_res_trt$symbol <- mcols(gi_res_trt)$symbol
 table(ressex[,"padj"] < 0.05)
 summary(ressex)
 SigGeneWrapper(ressex, 0.05, "sex")
+
+ressex_gi <-ressex
 ```
 
 best model for downstream things right now
@@ -323,7 +325,7 @@ matrix <- as.data.frame(counts(ddstrt))
 ddstrt <- DESeq(ddstrt, test="Wald")
 
 #rename transcript rows to ensid names
-rownames(ddstrt)=annos$ensid[match(names(ddstrt),annos$gene)]
+#rownames(ddstrt)=annos$ensid[match(names(ddstrt),annos$gene)]
 #remove the NAs (those transcripts dont have a ensid name)
 ddstrt <- ddstrt[complete.cases(rownames(ddstrt)), ]
 ddstrt <- ddstrt[!rownames(ddstrt) == "NULL", ] 
@@ -341,7 +343,7 @@ summary(restrt)
 SigGeneWrapper(restrt, 0.05, "trt")
 
 restrt_gi <-restrt
-
+write.csv(restrt_gi, file="results/GOresults/gi/restrt_gi.csv")
 
 vsd <- varianceStabilizingTransformation(ddstrt, blind = FALSE)
 meanSdPlot(assay(vsd))
@@ -439,8 +441,8 @@ ggsave("figures/gi/gi_DE_plots.png", plot = gi_DE_plots, width = 8, height = 20)
 ```
 
 ```{r}
-up_gi <- filter(as.data.frame(restrt), log2FoldChange > 0, padj < 0.05)
-gostres_gi_up <- gost(query = up_gi$hgnc_symbol, 
+up_gi <- filter(as.data.frame(restrt_gi), log2FoldChange > 0, padj < 0.05)
+gostres_gi_up <- gost(query = rownames(up_gi), 
                 organism = "hsapiens", ordered_query = FALSE, 
                 multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
                 measure_underrepresentation = FALSE, evcodes = FALSE, 
@@ -454,8 +456,8 @@ go_gi_up$DE <- "up"
 go_gi_up <- dplyr::filter(go_gi_up, grepl('GO', V1))
 go_gi_up <- top_n(go_gi_up, 20, V4)
 
-down_gi <- filter(as.data.frame(restrt), log2FoldChange < 0, padj < 0.05)
-gostres_gi_down <- gost(query = down_gi$hgnc_symbol, 
+down_gi <- filter(as.data.frame(restrt_gi), log2FoldChange < 0, padj < 0.05)
+gostres_gi_down <- gost(query = rownames(down_gi), 
                 organism = "hsapiens", ordered_query = FALSE, 
                 multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
                 measure_underrepresentation = FALSE, evcodes = FALSE, 

@@ -195,6 +195,9 @@ gs_scoresheat(scores_mat,n_gs = 30)
 
 ```{r kid data}
 kid_countdata <- dplyr::select(countdata, contains("kid"))
+
+write.csv(kid_countdata, file="results/GOresults/kid/kid_count_data.csv")
+
 kid_samples <-samples %>% filter(tissue == "kid") 
 kid_samples$trt <- as.factor(kid_samples$trt)
 kid_samples$sex <- as.factor(kid_samples$sex)
@@ -302,6 +305,8 @@ kid_res_trt$symbol <- mcols(kid_res_trt)$symbol
 table(ressex[,"padj"] < 0.05)
 summary(ressex)
 SigGeneWrapper(ressex, 0.05, "sex")
+
+ressex_kid <-ressex
 ```
 
 best model for downstream things right now
@@ -323,7 +328,7 @@ ddstrt <- DESeq(ddstrt, test="Wald")
 
 
 #rename transcript rows to ensid names
-rownames(ddstrt)=annos$ensid[match(names(ddstrt),annos$gene)]
+#rownames(ddstrt)=annos$ensid[match(names(ddstrt),annos$gene)]
 #remove the NAs (those transcripts dont have a ensid name)
 ddstrt <- ddstrt[complete.cases(rownames(ddstrt)), ]
 ddstrt <- ddstrt[!rownames(ddstrt) == "NULL", ] 
@@ -360,12 +365,14 @@ pca <- ggplot(pcaData, aes(x = PC1, y = PC2, color = trt, shape = sex, name=name
   ylab(paste0("PC2: ", percentVar[2], "% variance")) +
   coord_fixed() + theme_bw() +
   guides(shape = guide_legend(order = 1),color = guide_legend(order = 2)) 
-ggplotly(pca)
+#ggplotly(pca)
+
+write.csv(restrt_kid, file="results/GOresults/kid/restrt_kid.csv")
 
 ```
 
 
-```{r}
+
 restrt <- gene_ton_fun(restrt,0,ensembl)
 write.csv(restrt, file="results/GOresults/kid/kid_de_GO.csv")
 #gene_ton_fig(restrt,0,ensembl)
@@ -409,7 +416,6 @@ res_enrich_kid <- get_aggrscores(res_enrich = res_enrich,
 #          project_id = "myFirstGeneTonic")
 #
 
-head(deseqresult2df(restrt))
 #one gene at a time
 #dds_macrophage <- estimateSizeFactors(kid_dds_trt)   
 
@@ -428,12 +434,12 @@ plist[[i]] <- gene_plot(kid_dds_trt,
 }
 kid_DE_plots <- gridExtra::grid.arrange(grobs = plist, ncol=1)
 ggsave("figures/kid/kid_DE_plots.png", plot = kid_DE_plots, width = 8, height = 20)
-```
+
 
 
 ```{r}
-up_kid <- filter(as.data.frame(restrt), log2FoldChange > 0, padj < 0.05)
-gostres_kid_up <- gost(query = up_kid$hgnc_symbol, 
+up_kid <- filter(as.data.frame(restrt_kid), log2FoldChange > 0, padj < 0.05)
+gostres_kid_up <- gost(query = rownames(up_kid), 
                 organism = "hsapiens", ordered_query = FALSE, 
                 multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
                 measure_underrepresentation = FALSE, evcodes = FALSE, 
@@ -447,8 +453,8 @@ go_kid_up$DE <- "up"
 go_kid_up <- dplyr::filter(go_kid_up, grepl('GO', V1))
 go_kid_up <- top_n(go_kid_up, 20, V4)
 
-down_kid <- filter(as.data.frame(restrt), log2FoldChange < 0, padj < 0.05)
-gostres_kid_down <- gost(query = down_kid$hgnc_symbol, 
+down_kid <- filter(as.data.frame(restrt_kid), log2FoldChange < 0, padj < 0.05)
+gostres_kid_down <- gost(query = rownames(down_kid), 
                 organism = "hsapiens", ordered_query = FALSE, 
                 multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
                 measure_underrepresentation = FALSE, evcodes = FALSE, 

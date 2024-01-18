@@ -325,6 +325,8 @@ modTraitP_hyp_long_sig <- modTraitP_hyp_long_sig %>% rename(color = Var1,pheno =
 
 combo <- list(genes_mods_filtered,modTraitP_hyp_long_sig)
 combo <- combo %>% reduce(full_join, by="color")
+combo_hyp <- combo
+
 
 looping <- unique(combo$color)
 hyp_list<-list()
@@ -335,22 +337,33 @@ phenos <- c(unique(as.character(subset$pheno)))
   for (p in phenos) 
   {
     subset2 <- filter(subset, pheno==p)
-    gostres_i <- gost(query = subset2$gene, 
+    gostres_i <-gost(query = subset2$gene, 
                 organism = "hsapiens", ordered_query = FALSE, 
-                multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
+                multi_query = FALSE, significant = T, exclude_iea = FALSE, 
                 measure_underrepresentation = FALSE, evcodes = FALSE, 
                 user_threshold = 0.05, correction_method = "g_SCS", 
                 domain_scope = "annotated", custom_bg = NULL, 
                 numeric_ns = "", sources = NULL, as_short_link = FALSE, highlight = TRUE)
+    
     go_i <- as.data.frame(cbind(gostres_i$result$term_id,gostres_i$result$term_name, gostres_i$result$term_size,gostres_i$result$p_value))
+    if(!is.data.frame(go_i) || !nrow(go_i)) next
     go_i <- top_n(go_i, 20, V4)
-    go_i <- go_i %>% rename(!! paste0(p):=V3)
+    #go_i <- go_i %>% rename(!! paste0(p):=V3)
+    go_i$pheno <- p
   }
+if(!is.data.frame(go_i) || !nrow(go_i)) next
 go_i <-select(go_i, -V4)
 hyp_list[[i]]<-go_i
 }
 
+
+big_data_hyp = do.call(rbind, hyp_list)
+#big_data_hyp$tissue <- "hyp"
+
 go_wgcna_hyp <- hyp_list %>% reduce(full_join, by=c("V1","V2"))
+library(openxlsx)
+#write.xlsx(setNames(as.list(lapply(hyp_list, data.frame)), names(hyp_list)), file="hyp_list.xlsx")
+
 ```
 
 ```{r}

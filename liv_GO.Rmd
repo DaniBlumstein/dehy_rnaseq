@@ -303,6 +303,8 @@ liv_res_trt$symbol <- mcols(liv_res_trt)$symbol
 table(ressex[,"padj"] < 0.05)
 summary(ressex)
 SigGeneWrapper(ressex, 0.05, "sex")
+
+ressex_liv <-ressex
 ```
 
 best model for downstream things right now
@@ -323,7 +325,7 @@ matrix <- as.data.frame(counts(ddstrt))
 ddstrt <- DESeq(ddstrt, test="Wald")
 
 #rename transcript rows to ensid names
-rownames(ddstrt)=annos$ensid[match(names(ddstrt),annos$gene)]
+#rownames(ddstrt)=annos$ensid[match(names(ddstrt),annos$gene)]
 #remove the NAs (those transcripts dont have a ensid name)
 ddstrt <- ddstrt[complete.cases(rownames(ddstrt)), ]
 ddstrt <- ddstrt[!rownames(ddstrt) == "NULL", ] 
@@ -341,7 +343,7 @@ summary(restrt)
 SigGeneWrapper(restrt, 0.05, "trt")
 
 restrt_liv <-restrt
-
+write.csv(restrt_liv, file="results/GOresults/liv/restrt_liv.csv")
 
 vsd <- varianceStabilizingTransformation(ddstrt, blind = FALSE)
 meanSdPlot(assay(vsd))
@@ -365,7 +367,7 @@ ggplotly(pca)
 ```
 
 
-```{r}
+
 restrt <- gene_ton_fun(restrt,0,ensembl)
 write.csv(restrt, file="results/GOresults/liv/liv_de_GO.csv")
 #gene_ton_fig(restrt,0,ensembl)
@@ -421,11 +423,11 @@ plist[[i]] <- gene_plot(liv_dds_trt,
 }
 liv_DE_plots <- gridExtra::grid.arrange(grobs = plist, ncol=1)
 ggsave("figures/liv/liv_DE_plots.png", plot = liv_DE_plots, width = 8, height = 20)
-```
+
 
 ```{r}
-up_liv <- filter(as.data.frame(restrt), log2FoldChange > 0, padj < 0.05)
-gostres_liv_up <- gost(query = up_liv$hgnc_symbol, 
+up_liv <- filter(as.data.frame(restrt_liv), log2FoldChange > 0, padj < 0.05)
+gostres_liv_up <- gost(query = rownames(up_liv), 
                 organism = "hsapiens", ordered_query = FALSE, 
                 multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
                 measure_underrepresentation = FALSE, evcodes = FALSE, 
@@ -439,8 +441,8 @@ go_liv_up$DE <- "up"
 go_liv_up <- dplyr::filter(go_liv_up, grepl('GO', V1))
 go_liv_up <- top_n(go_liv_up, 20, V4)
 
-down_liv <- filter(as.data.frame(restrt), log2FoldChange < 0, padj < 0.05)
-gostres_liv_down <- gost(query = down_liv$hgnc_symbol, 
+down_liv <- filter(as.data.frame(restrt_liv), log2FoldChange < 0, padj < 0.05)
+gostres_liv_down <- gost(query = rownames(down_liv), 
                 organism = "hsapiens", ordered_query = FALSE, 
                 multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
                 measure_underrepresentation = FALSE, evcodes = FALSE, 
